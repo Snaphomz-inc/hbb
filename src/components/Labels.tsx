@@ -2,7 +2,7 @@ import type maplibregl from "maplibre-gl";
 import { useEffect, useState } from "react";
 import type { Label } from "../story/chapters";
 
-type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean };
+type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean; flip: boolean };
 
 const CARD_HEIGHT = 46;
 const STEM = 34;
@@ -40,27 +40,35 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
             { x0: 0, y0: 0, x1: 600, y1: 250 },
             { x0: width - 400, y0: 0, x1: width, y1: height * 0.75 },
           ]
-        : [{ x0: 0, y0: 0, x1: width, y1: 220 }];
+        : [
+            { x0: 0, y0: 0, x1: width, y1: 230 },
+            // the stat row and question box sit along the bottom on phones
+            { x0: 0, y0: height - 290, x1: width, y1: height },
+          ];
       const taken: Rect[] = [];
       const next: Placed[] = [];
       for (const label of labels) {
         const point = map.project([label.lon, label.lat]);
         const inView = Number.isFinite(point.x) && Number.isFinite(point.y) && point.x > 30 && point.x < width - 30 && point.y > 110 && point.y < height - 70;
         let lift = 0;
+        let flip = false;
         let rect: Rect | null = null;
         if (inView) {
-          const w = cardWidth(label);
+          const w = Math.min(cardWidth(label), wide ? Infinity : 200);
+          // A card that would run off the right edge hangs to the left of its stem instead.
+          flip = point.x + 6 + w > width - 12;
+          const x0 = flip ? point.x - 6 - w : point.x + 6;
           for (let attempt = 0; attempt < 4; attempt += 1) {
             lift = attempt * LIFT_STEP;
             const bottom = point.y - STEM - lift;
-            rect = { x0: point.x + 6, y0: bottom - CARD_HEIGHT, x1: point.x + 6 + w, y1: bottom };
+            rect = { x0, y0: bottom - CARD_HEIGHT, x1: x0 + w, y1: bottom };
             if (!taken.some((other) => overlaps(rect!, other))) break;
           }
         }
         const underText = rect ? blocked.some((zone) => overlaps(rect!, zone)) : false;
         const onScreen = inView && !underText && rect !== null && rect.y0 > 60;
         if (onScreen && rect) taken.push(rect);
-        next.push({ ...label, x: point.x, y: point.y, lift, onScreen });
+        next.push({ ...label, x: point.x, y: point.y, lift, onScreen, flip });
       }
       setPlaced(next);
     };
@@ -83,7 +91,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
       {placed.map((label, index) => (
         <div
           key={label.id}
-          className={`label tone-${label.tone ?? "white"} ${visible && label.onScreen ? "in" : ""}`}
+          className={`label tone-${label.tone ?? "white"} ${label.flip ? "label-flip" : ""} ${visible && label.onScreen ? "in" : ""}`}
           style={{
             transform: `translate(${label.x}px, ${label.y}px)`,
             transitionDelay: visible ? `${index * 90}ms` : "0ms",

@@ -2,7 +2,7 @@
   {
     "slug": "santa-monica",
     "name": "Santa Monica",
-    "region": "Westside, Los Angeles County",
+    "region": "Westside",
     "center": [
       -118.48553,
       34.02175
@@ -189,7 +189,7 @@
   {
     "slug": "sherman-oaks",
     "name": "Sherman Oaks",
-    "region": "San Fernando Valley, City of Los Angeles",
+    "region": "San Fernando Valley",
     "center": [
       -118.44278,
       34.15466
@@ -376,7 +376,7 @@
   {
     "slug": "manhattan-beach",
     "name": "Manhattan Beach",
-    "region": "South Bay, Los Angeles County",
+    "region": "South Bay",
     "center": [
       -118.40017,
       33.89031

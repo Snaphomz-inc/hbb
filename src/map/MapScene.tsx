@@ -175,6 +175,11 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
   } as never);
 }
 
+/** Collapse the attribution badge; MapLibre opens it on load and the map is not interactive. */
+export function collapseAttribution(map: maplibregl.Map): void {
+  map.getContainer().querySelector(".maplibregl-ctrl-attrib")?.classList.remove("maplibregl-compact-show");
+}
+
 /** True until map.remove() has run; calls on a removed map throw. */
 export function mapAlive(map: maplibregl.Map): boolean {
   const inner = map as unknown as { _removed?: boolean; style?: unknown };
@@ -217,6 +222,7 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
     map.on("load", () => {
       if (!alive) return;
       addDataLayers(map, data);
+      collapseAttribution(map);
       onReady(map);
     });
     return () => {

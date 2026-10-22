@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
+import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
 import { useScramble } from "./lib/scramble";
@@ -9,7 +10,6 @@ import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
 
-const DEFAULT_SLUG = "santa-monica";
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
 const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
@@ -44,8 +44,9 @@ const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
   ],
 };
 
+/** "" is the county overview; anything else is a neighborhood slug. */
 function slugFromHash(): string {
-  return window.location.hash.replace(/^#\/?/, "") || DEFAULT_SLUG;
+  return window.location.hash.replace(/^#\/?/, "");
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -126,6 +127,7 @@ function NeighborhoodChips({ index, current, onPick, title }: { index: IndexEntr
 export function App() {
   const [index, setIndex] = useState<IndexEntry[]>([]);
   const [slug, setSlug] = useState(slugFromHash);
+  const overview = slug === "";
   const [data, setData] = useState<Neighborhood | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [map, setMap] = useState<maplibregl.Map | null>(null);
@@ -150,6 +152,7 @@ export function App() {
     setError(null);
     lastCamera.current = "";
     window.scrollTo({ top: 0 });
+    if (slug === "") return;
     fetch(`${DATA_BASE}/${slug}.json`)
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))))
       .then((loaded: Neighborhood) => {
@@ -207,7 +210,7 @@ export function App() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
-    window.location.hash = `/${next}`;
+    window.location.hash = next ? `/${next}` : "/";
   };
 
   const chapter: Chapter | undefined = chapters[position.active];
@@ -221,6 +224,7 @@ export function App() {
 
   return (
     <>
+      {overview && index.length > 0 && <Overview index={index} onPick={pick} />}
       {data && <MapScene key={data.slug} data={data} onReady={setMap} />}
       <div className="spacers">
         {chapters.map((c) => (
@@ -229,13 +233,14 @@ export function App() {
       </div>
 
       <header className="top">
-        <a className="wordmark" href="#/" onClick={(event) => { event.preventDefault(); pick(slug); }}>
+        <a className="wordmark" href="#/" onClick={(event) => { event.preventDefault(); pick(""); }}>
           snaphomz<span className="wordmark-dot">.</span>
         </a>
         <div className="top-right">
           <span className="poc">Los Angeles neighborhoods</span>
           <select className="select" value={slug} onChange={(event) => pick(event.target.value)} aria-label="Neighborhood">
-            {index.length === 0 && <option value={slug}>{data?.name ?? slug}</option>}
+            <option value="">All of Los Angeles</option>
+            {index.length === 0 && slug && <option value={slug}>{data?.name ?? slug}</option>}
             {regions.map(([region, entries]) => (
               <optgroup key={region} label={region}>
                 {entries.map((entry) => (
@@ -262,14 +267,14 @@ export function App() {
           )}
         </div>
       )}
-      {!error && (!data || !map) && (
+      {!error && !overview && (!data || !map) && (
         <div className="splash">
           <div className="splash-mark">snaphomz</div>
           <p>Loading {index.find((e) => e.slug === slug)?.name ?? "the neighborhood"}…</p>
         </div>
       )}
 
-      {data && chapter && map && (
+      {!overview && data && chapter && map && (
         <>
           <Labels map={map} labels={chapter.labels} visible={chapter.kind === "story" && settled} />
 

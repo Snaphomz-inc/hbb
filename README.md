@@ -13,6 +13,10 @@ Add one by appending to `scripts/neighborhoods.json` and rerunning the data buil
 A full rebuild makes a few hundred requests and takes about ten minutes; cached
 responses make later runs free, and `--skip-existing` resumes an interrupted run.
 
+The front door (`#/`) is a county overview: every neighborhood on one map, coloured by
+median price and listed by region; click a dot or a row to fly into its story
+(`#/venice`, `#/glendale`, ...).
+
 ## Run it
 
 ```bash
