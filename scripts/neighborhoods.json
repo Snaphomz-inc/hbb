@@ -1,0 +1,400 @@
+[
+  {
+    "slug": "santa-monica",
+    "name": "Santa Monica",
+    "region": "Westside",
+    "tagline": "Beach city with the Expo line, a walkable downtown and some of the Westside's priciest streets.",
+    "cities": ["Santa Monica"],
+    "zips": ["90401", "90402", "90403", "90404", "90405"],
+    "camera": { "bearing": 35, "pitch": 62 }
+  },
+  {
+    "slug": "venice",
+    "name": "Venice",
+    "region": "Westside",
+    "tagline": "The canals, the boardwalk and Abbot Kinney: bungalows and modern boxes a few blocks from the sand.",
+    "cities": ["Venice", "Los Angeles"],
+    "zips": ["90291"],
+    "byZip": true,
+    "camera": { "bearing": 20, "pitch": 62 }
+  },
+  {
+    "slug": "marina-del-rey",
+    "name": "Marina del Rey",
+    "region": "Westside",
+    "tagline": "Condo towers and townhomes around the harbor, between Venice and the airport.",
+    "cities": ["Marina Del Rey"],
+    "zips": ["90292"],
+    "camera": { "bearing": -30, "pitch": 60 }
+  },
+  {
+    "slug": "playa",
+    "name": "Playa Vista and Playa del Rey",
+    "region": "Westside",
+    "tagline": "A planned tech-campus district beside the Ballona wetlands, and the quiet beach town below the bluffs.",
+    "cities": ["Playa Vista", "Playa Del Rey"],
+    "zips": ["90094", "90293"],
+    "camera": { "bearing": -15, "pitch": 60 }
+  },
+  {
+    "slug": "culver-city",
+    "name": "Culver City",
+    "region": "Westside",
+    "tagline": "Studio town with a revived downtown, the Expo line and a mix of bungalows and new apartments.",
+    "cities": ["Culver City"],
+    "zips": ["90230", "90232"],
+    "camera": { "bearing": 40, "pitch": 60 }
+  },
+  {
+    "slug": "mar-vista",
+    "name": "Mar Vista",
+    "region": "Westside",
+    "tagline": "Hilly grid of post-war houses and new builds between Venice and Culver City.",
+    "cities": ["Los Angeles"],
+    "zips": ["90066"],
+    "byZip": true,
+    "camera": { "bearing": 25, "pitch": 60 }
+  },
+  {
+    "slug": "westchester",
+    "name": "Westchester",
+    "region": "Westside",
+    "tagline": "Family streets on the bluffs above the airport, next to Loyola Marymount.",
+    "cities": ["Los Angeles"],
+    "zips": ["90045"],
+    "byZip": true,
+    "camera": { "bearing": 10, "pitch": 58 }
+  },
+  {
+    "slug": "palms",
+    "name": "Palms",
+    "region": "Westside",
+    "tagline": "Dense, central and relatively affordable for the Westside: apartments and small houses along the Expo line.",
+    "cities": ["Los Angeles"],
+    "zips": ["90034"],
+    "byZip": true,
+    "camera": { "bearing": 30, "pitch": 60 }
+  },
+  {
+    "slug": "west-la",
+    "name": "West Los Angeles",
+    "region": "Westside",
+    "tagline": "Sawtelle's Japantown, Rancho Park and the Expo line stops between the 405 and Westwood.",
+    "cities": ["Los Angeles"],
+    "zips": ["90025", "90064"],
+    "byZip": true,
+    "camera": { "bearing": 35, "pitch": 60 }
+  },
+  {
+    "slug": "westwood",
+    "name": "Westwood",
+    "region": "Westside",
+    "tagline": "UCLA's neighborhood: the Wilshire condo corridor, Westwood Village and single-family streets to the north.",
+    "cities": ["Los Angeles"],
+    "zips": ["90024"],
+    "byZip": true,
+    "camera": { "bearing": 45, "pitch": 60 }
+  },
+  {
+    "slug": "brentwood",
+    "name": "Brentwood",
+    "region": "Westside",
+    "tagline": "Leafy Westside enclave of large lots north of Wilshire, from San Vicente up into the canyons.",
+    "cities": ["Los Angeles"],
+    "zips": ["90049"],
+    "byZip": true,
+    "camera": { "bearing": 15, "pitch": 62 }
+  },
+  {
+    "slug": "bel-air",
+    "name": "Bel Air",
+    "region": "Westside",
+    "tagline": "Gated estates and canyon homes in the hills between Beverly Hills and Brentwood.",
+    "cities": ["Los Angeles"],
+    "zips": ["90077"],
+    "byZip": true,
+    "camera": { "bearing": 0, "pitch": 64 }
+  },
+  {
+    "slug": "century-city",
+    "name": "Century City",
+    "region": "Westside",
+    "tagline": "High-rise condos beside the office towers and the Westfield mall, on the old Fox backlot.",
+    "cities": ["Los Angeles"],
+    "zips": ["90067"],
+    "byZip": true,
+    "camera": { "bearing": 50, "pitch": 62 }
+  },
+  {
+    "slug": "beverly-hills",
+    "name": "Beverly Hills",
+    "region": "Beverly Hills and West Hollywood",
+    "tagline": "The flats, the hills and Rodeo Drive, with its own school district and city services.",
+    "cities": ["Beverly Hills"],
+    "zips": ["90210", "90211", "90212"],
+    "camera": { "bearing": 30, "pitch": 62 }
+  },
+  {
+    "slug": "west-hollywood",
+    "name": "West Hollywood",
+    "region": "Beverly Hills and West Hollywood",
+    "tagline": "Dense, walkable city between Hollywood and Beverly Hills: the Sunset Strip, the design district, condos and 1920s courtyard apartments.",
+    "cities": ["West Hollywood"],
+    "zips": ["90069", "90046", "90048"],
+    "camera": { "bearing": -25, "pitch": 60 }
+  },
+  {
+    "slug": "beverly-grove",
+    "name": "Beverly Grove and Fairfax",
+    "region": "Beverly Hills and West Hollywood",
+    "tagline": "Between the Grove and Cedars-Sinai: duplexes, Spanish bungalows and new apartments.",
+    "cities": ["Los Angeles"],
+    "zips": ["90048"],
+    "byZip": true,
+    "camera": { "bearing": 20, "pitch": 60 }
+  },
+  {
+    "slug": "hollywood-hills",
+    "name": "Hollywood Hills West",
+    "region": "Beverly Hills and West Hollywood",
+    "tagline": "Laurel Canyon and the hills above the Sunset Strip: houses on winding streets with city views.",
+    "cities": ["Los Angeles"],
+    "zips": ["90046"],
+    "byZip": true,
+    "camera": { "bearing": 10, "pitch": 64 }
+  },
+  {
+    "slug": "sherman-oaks",
+    "name": "Sherman Oaks",
+    "region": "San Fernando Valley",
+    "tagline": "Valley neighborhood of ranch houses and hillside homes along Ventura Boulevard.",
+    "cities": ["Sherman Oaks"],
+    "zips": ["91403", "91423"],
+    "camera": { "bearing": -20, "pitch": 60 }
+  },
+  {
+    "slug": "studio-city",
+    "name": "Studio City",
+    "region": "San Fernando Valley",
+    "tagline": "Ventura Boulevard's restaurant row, hillside streets south of the boulevard and the studios across the river.",
+    "cities": ["Studio City"],
+    "zips": ["91604", "91602"],
+    "camera": { "bearing": -35, "pitch": 60 }
+  },
+  {
+    "slug": "encino",
+    "name": "Encino",
+    "region": "San Fernando Valley",
+    "tagline": "Ranch houses and estate lots along the base of the Santa Monica Mountains, next to the Sepulveda Basin.",
+    "cities": ["Encino"],
+    "zips": ["91316", "91436"],
+    "camera": { "bearing": -10, "pitch": 60 }
+  },
+  {
+    "slug": "tarzana",
+    "name": "Tarzana",
+    "region": "San Fernando Valley",
+    "tagline": "Big lots south of the boulevard and 1950s tracts north of it, named after the Burroughs ranch.",
+    "cities": ["Tarzana"],
+    "zips": ["91356"],
+    "camera": { "bearing": -15, "pitch": 60 }
+  },
+  {
+    "slug": "woodland-hills",
+    "name": "Woodland Hills",
+    "region": "San Fernando Valley",
+    "tagline": "West Valley suburb with Warner Center's towers and leafy streets climbing toward Mulholland.",
+    "cities": ["Woodland Hills"],
+    "zips": ["91367", "91364"],
+    "camera": { "bearing": -20, "pitch": 60 }
+  },
+  {
+    "slug": "calabasas",
+    "name": "Calabasas",
+    "region": "San Fernando Valley",
+    "tagline": "Gated communities and a small old town just over the city line, with its own school district.",
+    "cities": ["Calabasas"],
+    "zips": ["91302", "91301"],
+    "camera": { "bearing": -30, "pitch": 62 }
+  },
+  {
+    "slug": "northridge",
+    "name": "Northridge",
+    "region": "San Fernando Valley",
+    "tagline": "Cal State Northridge, 1960s ranch tracts and the Fashion Center in the north-west Valley.",
+    "cities": ["Northridge"],
+    "zips": ["91325", "91324"],
+    "camera": { "bearing": 15, "pitch": 58 }
+  },
+  {
+    "slug": "granada-hills",
+    "name": "Granada Hills",
+    "region": "San Fernando Valley",
+    "tagline": "North Valley suburb of mid-century houses, with larger lots up toward the hills.",
+    "cities": ["Granada Hills"],
+    "zips": ["91344"],
+    "camera": { "bearing": 20, "pitch": 58 }
+  },
+  {
+    "slug": "porter-ranch",
+    "name": "Porter Ranch",
+    "region": "San Fernando Valley",
+    "tagline": "Newer master-planned tracts on the north Valley slopes, built mostly since the 1990s.",
+    "cities": ["Porter Ranch"],
+    "zips": ["91326"],
+    "camera": { "bearing": 25, "pitch": 60 }
+  },
+  {
+    "slug": "chatsworth",
+    "name": "Chatsworth",
+    "region": "San Fernando Valley",
+    "tagline": "Horse properties and ranch houses under the sandstone peaks of the west Valley.",
+    "cities": ["Chatsworth"],
+    "zips": ["91311"],
+    "camera": { "bearing": -5, "pitch": 60 }
+  },
+  {
+    "slug": "north-hollywood",
+    "name": "North Hollywood",
+    "region": "San Fernando Valley",
+    "tagline": "The NoHo Arts District, the end of the Metro B line and dense blocks of apartments and small houses.",
+    "cities": ["North Hollywood"],
+    "zips": ["91601", "91602", "91605", "91606"],
+    "camera": { "bearing": 30, "pitch": 58 }
+  },
+  {
+    "slug": "van-nuys",
+    "name": "Van Nuys",
+    "region": "San Fernando Valley",
+    "tagline": "Mid-Valley neighborhood of modest post-war houses, apartment blocks and the G line busway.",
+    "cities": ["Van Nuys"],
+    "zips": ["91405", "91406", "91401", "91411"],
+    "camera": { "bearing": 10, "pitch": 58 }
+  },
+  {
+    "slug": "burbank",
+    "name": "Burbank",
+    "region": "Glendale, Burbank and the foothills",
+    "tagline": "Media city with its own schools, airport and utility; tidy mid-century streets up to the Verdugo foothills.",
+    "cities": ["Burbank"],
+    "zips": ["91501", "91502", "91504", "91505", "91506"],
+    "camera": { "bearing": 40, "pitch": 60 }
+  },
+  {
+    "slug": "glendale",
+    "name": "Glendale",
+    "region": "Glendale, Burbank and the foothills",
+    "tagline": "Third-largest city in the county: hillside neighborhoods, the Brand Boulevard core and dense condo blocks.",
+    "cities": ["Glendale"],
+    "zips": ["91201", "91202", "91203", "91204", "91205", "91206", "91207", "91208"],
+    "camera": { "bearing": 20, "pitch": 60 }
+  },
+  {
+    "slug": "la-canada-flintridge",
+    "name": "La Cañada Flintridge",
+    "region": "Glendale, Burbank and the foothills",
+    "tagline": "Foothill city known for its school district and large lots under the Angeles National Forest.",
+    "cities": ["La Canada Flintridge"],
+    "zips": ["91011"],
+    "camera": { "bearing": 15, "pitch": 62 }
+  },
+  {
+    "slug": "la-crescenta",
+    "name": "La Crescenta",
+    "region": "Glendale, Burbank and the foothills",
+    "tagline": "Foothill community of sloping streets and mid-century houses between La Cañada and Tujunga.",
+    "cities": ["La Crescenta"],
+    "zips": ["91214"],
+    "camera": { "bearing": 10, "pitch": 62 }
+  },
+  {
+    "slug": "sunland-tujunga",
+    "name": "Sunland-Tujunga",
+    "region": "Glendale, Burbank and the foothills",
+    "tagline": "Rural-feeling foothill neighborhoods at the top of the Valley, backing onto the national forest.",
+    "cities": ["Sunland", "Tujunga"],
+    "zips": ["91040", "91042"],
+    "camera": { "bearing": 20, "pitch": 62 }
+  },
+  {
+    "slug": "manhattan-beach",
+    "name": "Manhattan Beach",
+    "region": "South Bay",
+    "tagline": "Small beach town with the Strand, top-rated schools and a tight housing stock.",
+    "cities": ["Manhattan Beach"],
+    "zips": ["90266"],
+    "camera": { "bearing": 60, "pitch": 60 }
+  },
+  {
+    "slug": "hermosa-beach",
+    "name": "Hermosa Beach",
+    "region": "South Bay",
+    "tagline": "Smallest of the beach cities: the Strand, Pier Avenue and tightly packed lots.",
+    "cities": ["Hermosa Beach"],
+    "zips": ["90254"],
+    "camera": { "bearing": 55, "pitch": 60 }
+  },
+  {
+    "slug": "redondo-beach",
+    "name": "Redondo Beach",
+    "region": "South Bay",
+    "tagline": "The harbor, the pier and the Riviera on the south side; townhome-heavy North Redondo near the 405.",
+    "cities": ["Redondo Beach"],
+    "zips": ["90277", "90278"],
+    "camera": { "bearing": 50, "pitch": 60 }
+  },
+  {
+    "slug": "el-segundo",
+    "name": "El Segundo",
+    "region": "South Bay",
+    "tagline": "Small town behind the aerospace campuses: bungalows, a Main Street and its own schools.",
+    "cities": ["El Segundo"],
+    "zips": ["90245"],
+    "camera": { "bearing": 45, "pitch": 58 }
+  },
+  {
+    "slug": "torrance",
+    "name": "Torrance",
+    "region": "South Bay",
+    "tagline": "Big South Bay suburb with the Del Amo mall, Old Torrance and well-regarded schools.",
+    "cities": ["Torrance"],
+    "zips": ["90501", "90502", "90503", "90504", "90505"],
+    "camera": { "bearing": 35, "pitch": 58 }
+  },
+  {
+    "slug": "palos-verdes",
+    "name": "Palos Verdes Peninsula",
+    "region": "South Bay",
+    "tagline": "Ocean-view lots, horse trails and the Peninsula school district, with slow-moving land on the south side.",
+    "cities": ["Rancho Palos Verdes", "Palos Verdes Estates", "Rolling Hills Estates", "Rolling Hills", "Palos Verdes Peninsula"],
+    "zips": ["90274", "90275"],
+    "camera": { "bearing": 70, "pitch": 62 }
+  },
+  {
+    "slug": "hawthorne",
+    "name": "Hawthorne",
+    "region": "South Bay",
+    "tagline": "Home of the SpaceX campus, with modest post-war houses and some of the South Bay's lowest prices.",
+    "cities": ["Hawthorne"],
+    "zips": ["90250"],
+    "camera": { "bearing": 30, "pitch": 58 }
+  },
+  {
+    "slug": "gardena",
+    "name": "Gardena",
+    "region": "South Bay",
+    "tagline": "South Bay city with a deep Japanese-American history and small houses on standard lots.",
+    "cities": ["Gardena"],
+    "zips": ["90247", "90248", "90249"],
+    "camera": { "bearing": 25, "pitch": 58 }
+  },
+  {
+    "slug": "carson",
+    "name": "Carson",
+    "region": "South Bay",
+    "tagline": "1960s tracts, Cal State Dominguez Hills and the Dignity Health Sports Park at the edge of the harbor.",
+    "cities": ["Carson"],
+    "zips": ["90745", "90746", "90810"],
+    "camera": { "bearing": 20, "pitch": 58 }
+  }
+]

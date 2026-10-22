@@ -1,0 +1,475 @@
+[
+  {
+    "slug": "santa-monica",
+    "name": "Santa Monica",
+    "region": "Westside, Los Angeles County",
+    "center": [
+      -118.48553,
+      34.02175
+    ],
+    "medianPrice": 1800000,
+    "sales": 583
+  },
+  {
+    "slug": "venice",
+    "name": "Venice",
+    "region": "Westside",
+    "center": [
+      -118.46392,
+      33.9936
+    ],
+    "medianPrice": 2150000.0,
+    "sales": 228
+  },
+  {
+    "slug": "marina-del-rey",
+    "name": "Marina del Rey",
+    "region": "Westside",
+    "center": [
+      -118.44888,
+      33.97917
+    ],
+    "medianPrice": 1235000.0,
+    "sales": 196
+  },
+  {
+    "slug": "playa",
+    "name": "Playa Vista and Playa del Rey",
+    "region": "Westside",
+    "center": [
+      -118.4322,
+      33.96561
+    ],
+    "medianPrice": 1075000,
+    "sales": 187
+  },
+  {
+    "slug": "culver-city",
+    "name": "Culver City",
+    "region": "Westside",
+    "center": [
+      -118.39741,
+      34.00222
+    ],
+    "medianPrice": 1200000,
+    "sales": 283
+  },
+  {
+    "slug": "mar-vista",
+    "name": "Mar Vista",
+    "region": "Westside",
+    "center": [
+      -118.4336,
+      34.00243
+    ],
+    "medianPrice": 2051000,
+    "sales": 331
+  },
+  {
+    "slug": "westchester",
+    "name": "Westchester",
+    "region": "Westside",
+    "center": [
+      -118.39963,
+      33.96699
+    ],
+    "medianPrice": 1660000,
+    "sales": 239
+  },
+  {
+    "slug": "palms",
+    "name": "Palms",
+    "region": "Westside",
+    "center": [
+      -118.40013,
+      34.03062
+    ],
+    "medianPrice": 1435000.0,
+    "sales": 172
+  },
+  {
+    "slug": "west-la",
+    "name": "West Los Angeles",
+    "region": "Westside",
+    "center": [
+      -118.43519,
+      34.03956
+    ],
+    "medianPrice": 1345000.0,
+    "sales": 436
+  },
+  {
+    "slug": "westwood",
+    "name": "Westwood",
+    "region": "Westside",
+    "center": [
+      -118.43824,
+      34.06164
+    ],
+    "medianPrice": 1347500.0,
+    "sales": 262
+  },
+  {
+    "slug": "brentwood",
+    "name": "Brentwood",
+    "region": "Westside",
+    "center": [
+      -118.48174,
+      34.07706
+    ],
+    "medianPrice": 2552500.0,
+    "sales": 416
+  },
+  {
+    "slug": "bel-air",
+    "name": "Bel Air",
+    "region": "Westside",
+    "center": [
+      -118.45641,
+      34.10549
+    ],
+    "medianPrice": 2862500.0,
+    "sales": 102
+  },
+  {
+    "slug": "century-city",
+    "name": "Century City",
+    "region": "Westside",
+    "center": [
+      -118.41241,
+      34.05552
+    ],
+    "medianPrice": 1791000.0,
+    "sales": 104
+  },
+  {
+    "slug": "beverly-hills",
+    "name": "Beverly Hills",
+    "region": "Beverly Hills and West Hollywood",
+    "center": [
+      -118.40766,
+      34.09317
+    ],
+    "medianPrice": 4000000,
+    "sales": 351
+  },
+  {
+    "slug": "west-hollywood",
+    "name": "West Hollywood",
+    "region": "Beverly Hills and West Hollywood",
+    "center": [
+      -118.3738,
+      34.08712
+    ],
+    "medianPrice": 1037570.0,
+    "sales": 328
+  },
+  {
+    "slug": "beverly-grove",
+    "name": "Beverly Grove and Fairfax",
+    "region": "Beverly Hills and West Hollywood",
+    "center": [
+      -118.3761,
+      34.07229
+    ],
+    "medianPrice": 1900000,
+    "sales": 133
+  },
+  {
+    "slug": "hollywood-hills",
+    "name": "Hollywood Hills West",
+    "region": "Beverly Hills and West Hollywood",
+    "center": [
+      -118.36769,
+      34.10568
+    ],
+    "medianPrice": 1905206.0,
+    "sales": 284
+  },
+  {
+    "slug": "sherman-oaks",
+    "name": "Sherman Oaks",
+    "region": "San Fernando Valley, City of Los Angeles",
+    "center": [
+      -118.44278,
+      34.15466
+    ],
+    "medianPrice": 1405000,
+    "sales": 575
+  },
+  {
+    "slug": "studio-city",
+    "name": "Studio City",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.39163,
+      34.14137
+    ],
+    "medianPrice": 1835000,
+    "sales": 315
+  },
+  {
+    "slug": "encino",
+    "name": "Encino",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.50011,
+      34.15824
+    ],
+    "medianPrice": 1550000,
+    "sales": 425
+  },
+  {
+    "slug": "tarzana",
+    "name": "Tarzana",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.54566,
+      34.16386
+    ],
+    "medianPrice": 1080000,
+    "sales": 279
+  },
+  {
+    "slug": "woodland-hills",
+    "name": "Woodland Hills",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.61267,
+      34.1672
+    ],
+    "medianPrice": 1200000,
+    "sales": 707
+  },
+  {
+    "slug": "calabasas",
+    "name": "Calabasas",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.66295,
+      34.13246
+    ],
+    "medianPrice": 1700000.0,
+    "sales": 264
+  },
+  {
+    "slug": "northridge",
+    "name": "Northridge",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.52906,
+      34.23521
+    ],
+    "medianPrice": 920000,
+    "sales": 337
+  },
+  {
+    "slug": "granada-hills",
+    "name": "Granada Hills",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.49899,
+      34.27941
+    ],
+    "medianPrice": 1005000.0,
+    "sales": 350
+  },
+  {
+    "slug": "porter-ranch",
+    "name": "Porter Ranch",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.55944,
+      34.27942
+    ],
+    "medianPrice": 1275000,
+    "sales": 297
+  },
+  {
+    "slug": "chatsworth",
+    "name": "Chatsworth",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.5991,
+      34.26205
+    ],
+    "medianPrice": 884600.0,
+    "sales": 326
+  },
+  {
+    "slug": "north-hollywood",
+    "name": "North Hollywood",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.39004,
+      34.18798
+    ],
+    "medianPrice": 850000,
+    "sales": 381
+  },
+  {
+    "slug": "van-nuys",
+    "name": "Van Nuys",
+    "region": "San Fernando Valley",
+    "center": [
+      -118.46869,
+      34.19439
+    ],
+    "medianPrice": 815000,
+    "sales": 359
+  },
+  {
+    "slug": "burbank",
+    "name": "Burbank",
+    "region": "Glendale, Burbank and the foothills",
+    "center": [
+      -118.32445,
+      34.18418
+    ],
+    "medianPrice": 1175000,
+    "sales": 553
+  },
+  {
+    "slug": "glendale",
+    "name": "Glendale",
+    "region": "Glendale, Burbank and the foothills",
+    "center": [
+      -118.2468,
+      34.18221
+    ],
+    "medianPrice": 1250000,
+    "sales": 631
+  },
+  {
+    "slug": "la-canada-flintridge",
+    "name": "La Ca\u00f1ada Flintridge",
+    "region": "Glendale, Burbank and the foothills",
+    "center": [
+      -118.20209,
+      34.20729
+    ],
+    "medianPrice": 2400915.0,
+    "sales": 154
+  },
+  {
+    "slug": "la-crescenta",
+    "name": "La Crescenta",
+    "region": "Glendale, Burbank and the foothills",
+    "center": [
+      -118.24665,
+      34.23135
+    ],
+    "medianPrice": 1360000,
+    "sales": 163
+  },
+  {
+    "slug": "sunland-tujunga",
+    "name": "Sunland-Tujunga",
+    "region": "Glendale, Burbank and the foothills",
+    "center": [
+      -118.31362,
+      34.25554
+    ],
+    "medianPrice": 879000,
+    "sales": 277
+  },
+  {
+    "slug": "manhattan-beach",
+    "name": "Manhattan Beach",
+    "region": "South Bay, Los Angeles County",
+    "center": [
+      -118.40017,
+      33.89031
+    ],
+    "medianPrice": 3500000,
+    "sales": 339
+  },
+  {
+    "slug": "hermosa-beach",
+    "name": "Hermosa Beach",
+    "region": "South Bay",
+    "center": [
+      -118.39511,
+      33.86563
+    ],
+    "medianPrice": 2400000.0,
+    "sales": 160
+  },
+  {
+    "slug": "redondo-beach",
+    "name": "Redondo Beach",
+    "region": "South Bay",
+    "center": [
+      -118.37499,
+      33.84577
+    ],
+    "medianPrice": 1560000,
+    "sales": 635
+  },
+  {
+    "slug": "el-segundo",
+    "name": "El Segundo",
+    "region": "South Bay",
+    "center": [
+      -118.41307,
+      33.92469
+    ],
+    "medianPrice": 1700000.0,
+    "sales": 104
+  },
+  {
+    "slug": "torrance",
+    "name": "Torrance",
+    "region": "South Bay",
+    "center": [
+      -118.33202,
+      33.83204
+    ],
+    "medianPrice": 1020000.0,
+    "sales": 988
+  },
+  {
+    "slug": "palos-verdes",
+    "name": "Palos Verdes Peninsula",
+    "region": "South Bay",
+    "center": [
+      -118.36498,
+      33.76821
+    ],
+    "medianPrice": 1950000.0,
+    "sales": 654
+  },
+  {
+    "slug": "hawthorne",
+    "name": "Hawthorne",
+    "region": "South Bay",
+    "center": [
+      -118.34624,
+      33.91338
+    ],
+    "medianPrice": 900000,
+    "sales": 205
+  },
+  {
+    "slug": "gardena",
+    "name": "Gardena",
+    "region": "South Bay",
+    "center": [
+      -118.30416,
+      33.8887
+    ],
+    "medianPrice": 780000.0,
+    "sales": 318
+  },
+  {
+    "slug": "carson",
+    "name": "Carson",
+    "region": "South Bay",
+    "center": [
+      -118.25314,
+      33.83766
+    ],
+    "medianPrice": 790000.0,
+    "sales": 346
+  }
+]
