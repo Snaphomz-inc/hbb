@@ -185,6 +185,8 @@ export function App() {
   const dive = useRef<{ at: number } | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
   const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number } | null>(null);
+  // While the pointer rests on a dot the camera drift pauses, so the dot stays under the cursor.
+  const holdDrift = useRef(false);
 
   useEffect(() => {
     fetch(`${DATA_BASE}/index.json`)
@@ -221,6 +223,9 @@ export function App() {
   useEffect(() => {
     if (!map || !data || chapters.length === 0) return;
     let frame = 0;
+    // The drift runs on its own clock, which stops while the pointer rests on a sale dot.
+    let driftNow = 0;
+    let lastNow = 0;
     const widthDegrees = data.bounds[1][0] - data.bounds[0][0];
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tick = (now: number) => {
@@ -232,8 +237,10 @@ export function App() {
       const a = chapters[from].camera;
       const b = chapters[to].camera;
       const fit = zoomToFit(widthDegrees, map.getContainer().clientWidth, 0.8);
-      const drift = still ? 0 : Math.sin(now / 9000) * 2.2;
-      const breathe = still ? 0 : Math.sin(now / 13000) * 0.04;
+      if (!holdDrift.current && lastNow) driftNow += now - lastNow;
+      lastNow = now;
+      const drift = still ? 0 : Math.sin(driftNow / 9000) * 2.2;
+      const breathe = still ? 0 : Math.sin(driftNow / 13000) * 0.04;
       const camera = {
         center: [lerp(a.center[0], b.center[0], t), lerp(a.center[1], b.center[1], t)] as [number, number],
         zoom: Math.min(17.5, Math.max(8.5, fit + lerp(a.zoomDelta, b.zoomDelta, t) + breathe)),
@@ -316,7 +323,7 @@ export function App() {
     const saleAt = (point: maplibregl.Point) => {
       // Dots exist in every chapter but are only drawn in the ones that list the layer, and only once the timeline has reached them.
       if (!chapterRef.current?.layers.includes("sales") || !map.getLayer("sales")) return null;
-      const pad = 7;
+      const pad = 9;
       const hits = map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["sales"] });
       return hits.find((f) => map.getFeatureState({ source: "sales", id: f.id as number }).on) ?? null;
     };
@@ -331,6 +338,7 @@ export function App() {
     };
     const onMove = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
+      holdDrift.current = Boolean(hit);
       map.getCanvas().style.cursor = hit ? "pointer" : "";
       if (!hit) {
         setSaleTip((tip) => (tip ? null : tip));
@@ -341,6 +349,7 @@ export function App() {
       setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind });
     };
     const onLeave = () => {
+      holdDrift.current = false;
       map.getCanvas().style.cursor = "";
       setSaleTip(null);
     };
