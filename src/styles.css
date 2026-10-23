@@ -411,6 +411,73 @@ select {
   background: transparent !important;
 }
 
+.swatch-solid {
+  height: 3px;
+  width: 16px;
+  border-radius: 2px;
+}
+
+.swatch-heat {
+  width: 28px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(29, 78, 216, 0.6), #7dd3fc, #dcf763, #fb7185);
+}
+
+/* The sales year as a ticker under the legend. */
+.timeline {
+  margin-top: 10px;
+  width: fit-content;
+  min-width: 260px;
+  max-width: 560px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px 8px;
+  backdrop-filter: blur(10px);
+}
+
+.timeline-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.timeline-month {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--lime);
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.timeline-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 26px;
+  margin-top: 8px;
+}
+
+.timeline-bar span {
+  flex: 1 1 0;
+  min-width: 6px;
+  border-radius: 2px 2px 0 0;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 220ms ease;
+}
+
+.timeline-bar span.on {
+  background: var(--lime);
+}
+
 .stats {
   display: flex;
   flex-direction: column;
@@ -936,4 +1003,19 @@ select {
   font-family: var(--mono);
   font-size: 9px;
   fill: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 900px) {
+  .timeline {
+    margin-top: 6px;
+    min-width: 0;
+    padding: 6px 10px 6px;
+  }
+  .timeline-month {
+    font-size: 17px;
+  }
+  .timeline-bar {
+    height: 16px;
+    margin-top: 5px;
+  }
 }

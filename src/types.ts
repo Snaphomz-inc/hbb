@@ -127,7 +127,19 @@ export type Neighborhood = {
     zips: string[];
     source: string;
   } | null;
+  /** Driving routes along real streets from the centre, OSRM without traffic. */
+  routes: Route[] | null;
   sources: Record<string, string>;
+};
+
+export type Route = {
+  to: string;
+  kind: "city" | "beach";
+  lon: number;
+  lat: number;
+  km: number;
+  minutes: number;
+  line: Array<[number, number]>;
 };
 
 export type IndexEntry = {

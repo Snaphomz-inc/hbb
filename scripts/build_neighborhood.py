@@ -54,6 +54,16 @@ LAYERS = {
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 CENSUS_REPORTER = "https://api.censusreporter.org/1.0/data/show/latest"
 LA_COUNTY_FIPS = "06037"
+OSRM = "https://router.project-osrm.org/route/v1/driving"
+# Where a commute ends: the job core, the airport, and whichever of two piers is nearer.
+DESTINATIONS = [
+    {"name": "Downtown LA", "lon": -118.2560, "lat": 34.0489},
+    {"name": "LAX", "lon": -118.4085, "lat": 33.9416},
+]
+BEACHES = [
+    {"name": "Santa Monica Pier", "lon": -118.4973, "lat": 34.0094},
+    {"name": "Manhattan Beach Pier", "lon": -118.4123, "lat": 33.8840},
+]
 
 OFFLINE = False
 PAUSE = 1.0  # seconds between live requests; a full-county run makes a few hundred of them
@@ -770,6 +780,38 @@ def payment(price: float, rate: float, down: float = 0.2, years: int = 30) -> fl
     return principal * monthly / (1 - (1 + monthly) ** -n)
 
 
+def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    dlat = radians(b[1] - a[1])
+    dlon = radians(b[0] - a[0])
+    h = sin(dlat / 2) ** 2 + cos(radians(a[1])) * cos(radians(b[1])) * sin(dlon / 2) ** 2
+    return 2 * 6371 * asin(sqrt(h))
+
+
+def load_routes(slug: str, center: list[float]) -> list[dict] | None:
+    """Driving routes along real streets from the neighborhood centre to each destination (OSRM, no traffic)."""
+    beach = min(BEACHES, key=lambda b: haversine_km((center[0], center[1]), (b["lon"], b["lat"])))
+    routes = []
+    for dest in [*DESTINATIONS, {**beach, "kind": "beach"}]:
+        try:
+            url = f"{OSRM}/{center[0]},{center[1]};{dest['lon']},{dest['lat']}?overview=full&geometries=geojson"
+            raw = fetch_json(f"{slug}-route-full-{dest['name']}", url)
+            route = raw["routes"][0]
+        except Exception as error:  # noqa: BLE001
+            warn(f"{slug}: route to {dest['name']} failed: {str(error)[:120]}")
+            return None
+        routes.append({
+            "to": dest["name"],
+            "kind": dest.get("kind", "city"),
+            "lon": dest["lon"],
+            "lat": dest["lat"],
+            "km": round(route["distance"] / 1000, 1),
+            "minutes": round(route["duration"] / 60),
+            "line": [[round(lon, 5), round(lat, 5)] for lon, lat in route["geometry"]["coordinates"]],
+        })
+    return routes
+
+
 def build(config: dict, con: sqlite3.Connection, dev: sqlite3.Connection | None, today: date) -> dict | None:
     slug = config["slug"]
     print(f"{config['name']}:")
@@ -812,9 +854,11 @@ def build(config: dict, con: sqlite3.Connection, dev: sqlite3.Connection | None,
         "hazards": load_hazards(slug, bbox, sales),
         "walkability": load_walkability(slug, bbox, sales),
         "census": load_census(slug, config["zips"]),
+        "routes": load_routes(slug, center),
         "sources": {
             "sales": "MLS closed sales, last 12 months, one row per sale (via the data extraction team)",
             "schools": "California Department of Education school directory 2025-26; LAUSD attendance zones",
+            "routes": "Driving routes and times without traffic: OSRM on OpenStreetMap",
         },
     }
     pois = result["pois"]

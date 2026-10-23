@@ -13,6 +13,10 @@ type OpacityTarget = Record<string, unknown>;
  */
 const TARGETS: Record<string, OpacityTarget> = {
   sales: { "circle-opacity": 0.92, "circle-stroke-opacity": 0.9 },
+  "sales-heat": { "heatmap-opacity": 0.78 },
+  "routes-casing": { "line-opacity": 0.8 },
+  routes: { "line-opacity": 1 },
+  "route-ends": { "circle-opacity": 1, "circle-stroke-opacity": 1 },
   parks: { "fill-opacity": 0.38 },
   walk: { "fill-opacity": ["interpolate", ["linear"], ["coalesce", ["get", "walk"], 0], 6, 0.0, 12, 0.05, 20, 0.16] },
   "pois-cafe": { "circle-opacity": 0.75, "circle-stroke-opacity": 0 },
@@ -33,7 +37,55 @@ const TARGETS: Record<string, OpacityTarget> = {
 
 export const LAYER_GROUPS: Record<string, string[]> = {
   flood: ["flood", "flood-line"],
+  routes: ["routes-casing", "routes", "route-ends"],
 };
+
+/** How long a sale's pulse ring lasts, in months of story time. */
+const PULSE = 1.4;
+
+/** When each sale appears on the timeline: its 30-day bucket plus a stable jitter so a month trickles in. */
+export function saleTime(i: number, monthsAgo: number): number {
+  return 11 - monthsAgo + (((i * 2654435761) >>> 0) % 1000) / 1000;
+}
+
+type SalesClock = { t: Float64Array; on: Uint8Array; pulsing: Set<number> };
+const clocks = new WeakMap<maplibregl.Map, SalesClock>();
+
+/**
+ * Advance the sales timeline. `clock` is in months from the start of the year (0 to 12 and a bit);
+ * null shows every sale with no pulses. Feature state keeps this off the worker thread.
+ */
+export function setSalesClock(map: maplibregl.Map, clock: number | null): void {
+  const state = clocks.get(map);
+  if (!state || !mapAlive(map)) return;
+  const { t, on, pulsing } = state;
+  for (let i = 0; i < t.length; i += 1) {
+    const age = clock == null ? 99 : clock - t[i];
+    const show = age >= 0;
+    if (show !== Boolean(on[i])) {
+      on[i] = show ? 1 : 0;
+      map.setFeatureState({ source: "sales", id: i }, { on: show });
+    }
+    if (age >= 0 && age <= PULSE) {
+      pulsing.add(i);
+      map.setFeatureState({ source: "sales", id: i }, { age });
+    } else if (pulsing.has(i)) {
+      pulsing.delete(i);
+      map.setFeatureState({ source: "sales", id: i }, { age: 9 });
+    }
+  }
+}
+
+/** Draw the commute routes from their start to `progress` (0 to 1) of their length. */
+export function setRouteProgress(map: maplibregl.Map, progress: number): void {
+  if (!mapAlive(map) || !map.getLayer("routes")) return;
+  const head = Math.max(0, Math.min(1, progress));
+  map.setPaintProperty("routes", "line-gradient", [
+    "interpolate", ["linear"], ["line-progress"],
+    head - 0.06, "#DCF763",
+    head, "rgba(220, 247, 99, 0)",
+  ]);
+}
 
 const TRANSITION = { duration: 750, delay: 0 };
 
@@ -120,20 +172,101 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
 
   const prices = data.sales.map((s) => s[2]);
   const [low, high] = quantiles(prices);
-  add(
-    "sales",
-    points(data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo]) => ({ lon, lat, price, sqft, kind, beds, monthsAgo }))),
+  const priceColor = ["step", ["get", "price"], "#7dd3fc", low, "#DCF763", high, "#fb7185"];
+  // Zoom must be the outer expression, so the on/off switch sits inside each stop.
+  const shown = ["boolean", ["feature-state", "on"], false];
+  const dotRadius = ["interpolate", ["linear"], ["zoom"], 12, ["case", shown, 2.2, 0], 14, ["case", shown, 3.6, 0], 16, ["case", shown, 7, 0]];
+  const salesSource: GeoJsonFeatureCollection = {
+    type: "FeatureCollection",
+    features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo], i) => ({
+      type: "Feature",
+      id: i,
+      properties: { price, sqft, kind, beds, monthsAgo },
+      geometry: { type: "Point", coordinates: [lon, lat] },
+    })),
+  };
+  clocks.set(map, { t: Float64Array.from(data.sales, (s, i) => saleTime(i, s[6])), on: new Uint8Array(data.sales.length), pulsing: new Set() });
+  // Where the money went: every sale as heat, weighted by price, under the buildings like a glow on the ground.
+  map.addSource("sales", { type: "geojson", data: salesSource });
+  map.addLayer(
     {
-      type: "circle",
-      paint: {
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.2, 14, 3.6, 16, 7],
-        "circle-color": ["step", ["get", "price"], "#7dd3fc", low, "#DCF763", high, "#fb7185"],
+      id: "sales-heat",
+      type: "heatmap",
+      source: "sales",
+      paint: withTransitions(
+        {
+          "heatmap-weight": ["min", 3, ["/", ["get", "price"], 1200000]],
+          "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 11, 12, 13, 26, 15, 48],
+          "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 11, 0.5, 15, 1.1],
+          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(29, 78, 216, 0)", 0.15, "rgba(29, 78, 216, 0.5)", 0.4, "rgba(125, 211, 252, 0.85)", 0.7, "#DCF763", 1, "#fb7185"],
+        },
+        TARGETS["sales-heat"],
+      ),
+    } as maplibregl.LayerSpecification,
+    "buildings",
+  );
+  map.addLayer({
+    id: "sales",
+    type: "circle",
+    source: "sales",
+    paint: withTransitions(
+      {
+        // Hidden until the timeline reaches the sale; see setSalesClock.
+        "circle-radius": dotRadius,
+        "circle-color": priceColor,
         "circle-stroke-color": "#0b1220",
         "circle-stroke-width": 0.8,
         "circle-pitch-alignment": "map",
       },
-    } as never,
-  );
+      TARGETS.sales,
+    ),
+  } as maplibregl.LayerSpecification);
+  // The pulse: a ring that grows and fades for a moment after each sale lands.
+  map.addLayer({
+    id: "sales-pulse",
+    type: "circle",
+    source: "sales",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ["coalesce", ["feature-state", "age"], 9], 0, 3, PULSE, 30, PULSE + 0.01, 0],
+      "circle-color": "rgba(0, 0, 0, 0)",
+      "circle-stroke-color": priceColor,
+      "circle-stroke-width": 1.5,
+      "circle-stroke-opacity": ["interpolate", ["linear"], ["coalesce", ["feature-state", "age"], 9], 0, 0.95, PULSE, 0],
+      "circle-pitch-alignment": "map",
+    },
+  } as unknown as maplibregl.LayerSpecification);
+
+  // Commutes drawn along real streets; line-gradient needs lineMetrics and is animated by setRouteProgress.
+  const routes = data.routes ?? [];
+  map.addSource("routes", {
+    type: "geojson",
+    lineMetrics: true,
+    data: { type: "FeatureCollection", features: routes.map((r) => ({ type: "Feature", properties: { to: r.to, kind: r.kind }, geometry: { type: "LineString", coordinates: r.line } })) },
+  });
+  map.addLayer({
+    id: "routes-casing",
+    type: "line",
+    source: "routes",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: withTransitions({ "line-color": "#0b1220", "line-width": ["interpolate", ["linear"], ["zoom"], 9, 5, 14, 10] }, TARGETS["routes-casing"]),
+  } as maplibregl.LayerSpecification);
+  map.addLayer({
+    id: "routes",
+    type: "line",
+    source: "routes",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: withTransitions({ "line-width": ["interpolate", ["linear"], ["zoom"], 9, 2.5, 14, 5] }, TARGETS.routes),
+  } as maplibregl.LayerSpecification);
+  setRouteProgress(map, 1);
+  add("route-ends", points([{ lon: data.center[0], lat: data.center[1], kind: "home" }, ...routes.map((r) => ({ lon: r.lon, lat: r.lat, kind: r.kind }))]), {
+    type: "circle",
+    paint: {
+      "circle-radius": ["match", ["get", "kind"], "home", 7, 6],
+      "circle-color": ["match", ["get", "kind"], "home", "#DCF763", "#ffffff"],
+      "circle-stroke-color": ["match", ["get", "kind"], "home", "#0b1220", "#DCF763"],
+      "circle-stroke-width": 2,
+    },
+  } as never);
 
   const pois = data.pois?.categories ?? {};
   add("pois-cafe", points([...(pois.cafe ?? []), ...(pois.restaurant ?? [])]), {

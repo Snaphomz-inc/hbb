@@ -79,6 +79,21 @@ with `VITE_BASE=/neighborhoods/ npm run build`. Neighborhoods are addressed by h
   cache is cleared.
 - **Phone layout** has been styled but should be checked on a real device.
 
+## Motion borrowed from Atlas
+
+Three ideas from the Atlas After Effects plugin, rebuilt live in MapLibre:
+
+- **Sales as timed events.** The homes chapter plays the year: each sale lands in its 30-day
+  bucket with a pulse ring, and a ticker under the legend shows the month, its count and median.
+  Driven by feature state (`setSalesClock`), so nothing is re-tiled per frame.
+- **Heat.** The trend chapter shows dollar volume of sales as a heatmap under the buildings.
+- **Journeys.** A "How far is everything?" chapter draws the driving routes to Downtown LA, LAX
+  and the nearer of the Santa Monica and Manhattan Beach piers along real streets, with times
+  and distances. Routes come from the public OSRM demo server at build time (no traffic; cached
+  like every other fetch) and are stored in each neighborhood file as `routes`.
+
+All three stop under `prefers-reduced-motion`.
+
 ## Export for After Effects (Atlas)
 
 `npm run export:atlas` writes `exports/atlas/` (git-ignored) from the built data: one GeoJSON

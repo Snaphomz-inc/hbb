@@ -34,14 +34,16 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const wide = width > 900;
-      // Screen areas the fixed text sits on: the headline block and the stat column.
+      // Screen areas the fixed text sits on: the headline block (measured, since the legend and
+      // timeline change its height) and the stat column.
+      const textBottom = (document.querySelector(".story.show .story-left")?.getBoundingClientRect().bottom ?? 0) + 8;
       const blocked: Rect[] = wide
         ? [
-            { x0: 0, y0: 0, x1: 600, y1: 250 },
+            { x0: 0, y0: 0, x1: 600, y1: Math.max(250, textBottom) },
             { x0: width - 400, y0: 0, x1: width, y1: height * 0.75 },
           ]
         : [
-            { x0: 0, y0: 0, x1: width, y1: 230 },
+            { x0: 0, y0: 0, x1: width, y1: Math.max(230, textBottom) },
             // the stat row and question box sit along the bottom on phones
             { x0: 0, y0: height - 290, x1: width, y1: height },
           ];

@@ -24,6 +24,8 @@ export type Camera = {
   bearing: number;
 };
 
+export type TimelineBucket = { label: string; count: number; median: number };
+
 export type Chapter = {
   id: string;
   kind: "hero" | "story" | "closing";
@@ -39,7 +41,36 @@ export type Chapter = {
   /** Section height, in viewport heights. */
   height: number;
   sources?: string[];
+  /** Animation that plays when the chapter settles: sales landing month by month, or routes drawing. */
+  playback?: "sales" | "routes";
+  /** The twelve 30-day buckets of the sales year, oldest first, for the ticker. */
+  timeline?: TimelineBucket[];
 };
+
+/** Count and median per 30-day bucket, oldest first, labelled by the month the bucket mostly falls in. */
+function salesTimeline(data: Neighborhood): TimelineBucket[] {
+  const built = new Date(`${data.builtAt}T12:00:00`);
+  const buckets: TimelineBucket[] = [];
+  for (let monthsAgo = 11; monthsAgo >= 0; monthsAgo -= 1) {
+    const prices = data.sales.filter((s) => s[6] === monthsAgo).map((s) => s[2]).sort((a, b) => a - b);
+    const when = new Date(built.getTime() - (monthsAgo * 30 + 15) * 86_400_000);
+    buckets.push({ label: when.toLocaleString("en-US", { month: "short", year: "numeric" }), count: prices.length, median: prices[Math.floor(prices.length / 2)] ?? 0 });
+  }
+  return buckets;
+}
+
+const MILES = 0.621371;
+
+function routeLabels(data: Neighborhood): Label[] {
+  return (data.routes ?? []).map((route) => ({
+    id: `route-${route.to}`,
+    lon: route.lon,
+    lat: route.lat,
+    title: route.to,
+    value: `${route.minutes} min · ${(route.km * MILES).toFixed(0)} mi`,
+    tone: route.kind === "beach" ? ("blue" as Tone) : route.to === "LAX" ? ("white" as Tone) : ("lime" as Tone),
+  }));
+}
 
 const LEVEL_NAMES: Record<string, string> = { Elementary: "Elementary", Middle: "Middle", High: "High", "Elem-High Combo": "K-12" };
 
@@ -221,6 +252,8 @@ export function buildChapters(data: Neighborhood): Chapter[] {
     accent: "sale",
     camera: { center, zoomDelta: 0.05, pitch: base.pitch, bearing: base.bearing },
     layers: ["sales"],
+    playback: "sales",
+    timeline: salesTimeline(data),
     labels: saleLabels(data),
     stats: [
       { label: "Median sale price", value: money(all.medianPrice), note: `${count(all.count)} sales · ${money(all.p25Price)} to ${money(all.p75Price)} middle half` },
@@ -237,6 +270,10 @@ export function buildChapters(data: Neighborhood): Chapter[] {
   const trend = market.trend;
   const census = data.census;
   const rentals = market.rentals;
+  const commuteStat: Stat | null = census
+    ? { label: "Work from home", value: percent(census.commute.workFromHome), note: `${percent(census.commute.drove)} drive · ${percent(census.commute.transit)} transit · ${percent(census.commute.walked)} walk` }
+    : null;
+  const routes = data.routes ?? [];
   chapters.push({
     id: "trend",
     kind: "story",
@@ -244,7 +281,7 @@ export function buildChapters(data: Neighborhood): Chapter[] {
     headline: trend?.change10y != null ? `${signedPercent(trend.change10y)} in ten years.` : "The longer view.",
     accent: trend?.change10y != null ? signedPercent(trend.change10y) : undefined,
     camera: { center: [center[0] + 0.004, center[1] - 0.002], zoomDelta: -0.2, pitch: base.pitch - 5, bearing: base.bearing + 40 },
-    layers: ["sales"],
+    layers: ["sales-heat"],
     labels: [],
     stats: [
       ...(trend ? [{ label: "House price index, ten years", value: `${signedPercent(trend.change5y)} in five`, note: `${trend.label}, FHFA, through ${trend.latestYear}`, series: trend.series, tone: "lime" as Tone }] : []),
@@ -252,8 +289,8 @@ export function buildChapters(data: Neighborhood): Chapter[] {
       ...(census ? [
         { label: "Own vs rent", value: `${percent(census.ownerShare)} own`, note: `median household income ${money(census.medianIncome)}` },
         { label: "Median age", value: census.medianAge ? `${Math.round(census.medianAge)}` : "—", note: `${count(census.population)} residents in ${census.zips.length} ZIP${census.zips.length > 1 ? "s" : ""}` },
-        { label: "Work from home", value: percent(census.commute.workFromHome), note: `${percent(census.commute.drove)} drive · ${percent(census.commute.transit)} transit · ${percent(census.commute.walked)} walk` },
       ] : []),
+      ...(commuteStat && routes.length === 0 ? [commuteStat] : []),
     ],
     height: 1.3,
     sources: [trend?.source, census?.source].filter((s): s is string => Boolean(s)),
@@ -284,6 +321,44 @@ export function buildChapters(data: Neighborhood): Chapter[] {
     height: 1.6,
     sources: [pois?.source, walk?.source].filter((s): s is string => Boolean(s)),
   });
+
+  if (routes.length > 0) {
+    // Frame the neighborhood and every route end: zoom out by the ratio of the route box to the neighborhood box.
+    const routeLons = routes.flatMap((r) => r.line.map((p) => p[0]));
+    const routeLats = routes.flatMap((r) => r.line.map((p) => p[1]));
+    const west = Math.min(data.bounds[0][0], ...routeLons);
+    const east = Math.max(data.bounds[1][0], ...routeLons);
+    const south = Math.min(data.bounds[0][1], ...routeLats);
+    const north = Math.max(data.bounds[1][1], ...routeLats);
+    const hoodWidth = data.bounds[1][0] - data.bounds[0][0];
+    // Latitude degrees are longer than longitude degrees here, and the viewport is wider than tall.
+    const routeWidth = Math.max(east - west, ((north - south) * 1.2) / 1.6);
+    const downtown = routes.find((r) => r.to === "Downtown LA") ?? routes[0];
+    chapters.push({
+      id: "commute",
+      kind: "story",
+      question: "How far is everything?",
+      headline: `Downtown in ${downtown.minutes} minutes.`,
+      accent: `${downtown.minutes} minutes`,
+      // Pitched, the bottom of the screen covers less ground than the top, so sit the camera nearer the southern end;
+      // the stats column hides the right edge on desktop, so nudge east.
+      camera: { center: [(west + east) / 2 + (east - west) * 0.07, south + (north - south) * 0.3], zoomDelta: Math.log2(hoodWidth / routeWidth) - 0.6, pitch: 40, bearing: base.bearing - 10 },
+      layers: ["routes"],
+      playback: "routes",
+      labels: routeLabels(data),
+      stats: [
+        ...routes.map((route) => ({
+          label: route.kind === "beach" ? `To the beach (${route.to})` : `To ${route.to}`,
+          value: `${route.minutes} min`,
+          note: `${(route.km * MILES).toFixed(1)} miles by car, without traffic`,
+          tone: route.kind === "beach" ? ("blue" as Tone) : route.to === "Downtown LA" ? ("lime" as Tone) : undefined,
+        })),
+        ...(commuteStat ? [commuteStat] : []),
+      ],
+      height: 1.5,
+      sources: [data.sources.routes, census?.source].filter((s): s is string => Boolean(s)),
+    });
+  }
 
   const publicSchools = data.schools.filter((s) => s.public);
   const schoolCenter = meanPoint(publicSchools) ?? center;

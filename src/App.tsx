@@ -5,7 +5,7 @@ import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
 import { useScramble } from "./lib/scramble";
-import { MapScene, mapAlive, showLayers } from "./map/MapScene";
+import { MapScene, mapAlive, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
 import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
@@ -17,6 +17,11 @@ const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
     { swatch: "dot #7dd3fc", label: "Lower-priced third" },
     { swatch: "dot #DCF763", label: "Middle third" },
     { swatch: "dot #fb7185", label: "Top third" },
+  ],
+  "sales-heat": [{ swatch: "heat", label: "Dollar volume of sales, last 12 months: warmer is more" }],
+  routes: [
+    { swatch: "solid #DCF763", label: "Drive, no traffic" },
+    { swatch: "dot #DCF763", label: "Here" },
   ],
   parks: [{ swatch: "fill #34d399", label: "Parks and beaches" }],
   walk: [{ swatch: "fill #DCF763", label: "More walkable blocks" }],
@@ -60,7 +65,29 @@ function lerpAngle(a: number, b: number, t: number): number {
 
 function Swatch({ spec }: { spec: string }) {
   const [kind, color] = spec.split(" ");
+  if (kind === "heat") return <span className="swatch swatch-heat" />;
   return <span className={`swatch swatch-${kind}`} style={{ background: color, borderColor: color }} />;
+}
+
+/** The year of sales as a ticker: the month landing now, its count and median, and a bar per month lit as it arrives. */
+function Timeline({ buckets, tick }: { buckets: Array<{ label: string; count: number; median: number }>; tick: number }) {
+  const at = tick < 0 ? buckets.length - 1 : Math.min(buckets.length - 1, tick);
+  const bucket = buckets[at];
+  const most = Math.max(1, ...buckets.map((b) => b.count));
+  if (!bucket) return null;
+  return (
+    <div className="timeline">
+      <div className="timeline-head">
+        <span className="timeline-month">{bucket.label}</span>
+        <span className="timeline-meta">{bucket.count} sales · median {money(bucket.median)}</span>
+      </div>
+      <div className="timeline-bar">
+        {buckets.map((b, i) => (
+          <span key={b.label + i} className={i <= at ? "on" : ""} style={{ height: `${Math.max(8, Math.round((b.count / most) * 100))}%` }} title={`${b.label}: ${b.count} sales`} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function Headline({ text, accent, className }: { text: string; accent?: string; className?: string }) {
@@ -185,7 +212,7 @@ export function App() {
       const breathe = still ? 0 : Math.sin(now / 13000) * 0.04;
       const camera = {
         center: [lerp(a.center[0], b.center[0], t), lerp(a.center[1], b.center[1], t)] as [number, number],
-        zoom: Math.min(17.5, Math.max(11.5, fit + lerp(a.zoomDelta, b.zoomDelta, t) + breathe)),
+        zoom: Math.min(17.5, Math.max(8.5, fit + lerp(a.zoomDelta, b.zoomDelta, t) + breathe)),
         pitch: lerp(a.pitch, b.pitch, t),
         bearing: lerpAngle(a.bearing, b.bearing, t) + drift,
       };
@@ -215,6 +242,39 @@ export function App() {
 
   const chapter: Chapter | undefined = chapters[position.active];
   const settled = position.progress > 0.06 || position.active === 0;
+  const playback = chapter?.kind === "story" && settled ? chapter.playback : undefined;
+  const chapterId = chapter?.id;
+  const [tick, setTick] = useState(-1);
+
+  // Chapter animations: the year of sales lands month by month; commute routes draw themselves.
+  useEffect(() => {
+    if (!map || !mapAlive(map)) return;
+    if (!playback) {
+      setSalesClock(map, null);
+      setRouteProgress(map, 1);
+      setTick(-1);
+      return;
+    }
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const duration = playback === "sales" ? 7000 : 2800;
+    const span = 12 + 1.5; // months, plus a tail for the last pulses to fade
+    const start = performance.now();
+    let frame = 0;
+    const step = (now: number) => {
+      if (!mapAlive(map)) return;
+      const u = still ? 1 : Math.min(1, (now - start) / duration);
+      if (playback === "sales") {
+        const clock = u * span;
+        setSalesClock(map, clock);
+        setTick(Math.min(11, Math.floor(clock)));
+      } else {
+        setRouteProgress(map, 1 - Math.pow(1 - u, 2));
+      }
+      if (u < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [map, playback, chapterId]);
   const legend = chapter ? chapter.layers.flatMap((layer) => LEGEND[layer] ?? []) : [];
   const regions = useMemo(() => {
     const groups = new Map<string, IndexEntry[]>();
@@ -307,6 +367,7 @@ export function App() {
                   ))}
                 </div>
               )}
+              {chapter.timeline && <Timeline buckets={chapter.timeline} tick={tick} />}
             </div>
             <aside className="stats" key={chapter.id}>
               {chapter.stats.map((stat, i) => (
