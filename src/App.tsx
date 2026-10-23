@@ -10,6 +10,7 @@ import { MapScene, mapAlive, setRouteProgress, setSalesClock, showLayers } from 
 import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
+import { city } from "./city";
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
@@ -371,9 +372,9 @@ export function App() {
           snaphomz<span className="wordmark-dot">.</span>
         </a>
         <div className="top-right">
-          <span className="poc">Los Angeles neighborhoods</span>
+          <span className="poc">{city.name} neighborhoods</span>
           <select className="select" value={slug} onChange={(event) => pick(event.target.value)} aria-label="Neighborhood">
-            <option value="">All of Los Angeles</option>
+            <option value="">All of {city.name}</option>
             {index.length === 0 && slug && <option value={slug}>{data?.name ?? slug}</option>}
             {regions.map(([region, entries]) => (
               <optgroup key={region} label={region}>
@@ -424,7 +425,7 @@ export function App() {
             </p>
             <NeighborhoodChips index={index} current={slug} onPick={pick} title="Nearby" />
             <div className="sources-strip">
-              <span>Built from</span> MLS closed sales · FEMA · CAL FIRE · California Geological Survey · EPA · OpenStreetMap · Census · U.S. DOT · FHFA · Freddie Mac
+              <span>Built from</span> {city.credits}
             </div>
           </div>
 

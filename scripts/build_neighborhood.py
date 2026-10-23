@@ -3,11 +3,14 @@
 Reads the cleaned CMA database (sales, leases, schools, zones, permits, the
 noise grid) and a handful of free public services (OpenStreetMap, FEMA flood
 zones, CAL FIRE, the California Geological Survey, EPA walkability, Census
-Reporter), and writes one JSON file per neighborhood into public/data/.
+Reporter), and writes one JSON file per neighborhood into cities/<city>/data/.
+
+A city is a folder under cities/: city.json (name, domain, commute destinations,
+county FIPS, source labels) and neighborhoods.json (the areas to build).
 
 Run from the project root with an isolated interpreter:
 
-    python -I scripts/build_neighborhood.py [--only santa-monica] [--offline]
+    python -I scripts/build_neighborhood.py [--city la] [--only santa-monica] [--offline]
 
 Every outside request is cached under scripts/cache/, so a rebuild is free and
 --offline builds from the cache alone. A source that fails is written as null
@@ -37,7 +40,7 @@ WORKSPACE = ROOT.parent
 CMA_DB = WORKSPACE / "parcel-package" / "re_superapp" / "data" / "cma-local.db"
 DEV_DB = WORKSPACE / "parcel-package" / "re_superapp" / "data" / "dev.db"
 CACHE = HERE / "cache"
-OUT = ROOT / "public" / "data"
+CITIES = ROOT / "cities"
 USER_AGENT = "snaphomz-neighborhood-aerial/1.0 (neighborhood guides; contact: snaphomz.com)"
 
 CALFIRE = "https://services1.arcgis.com/jUJYIo9tSA7EHvfZ/arcgis/rest/services"
@@ -53,17 +56,12 @@ LAYERS = {
 }
 OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"]
 CENSUS_REPORTER = "https://api.censusreporter.org/1.0/data/show/latest"
-LA_COUNTY_FIPS = "06037"
 OSRM = "https://router.project-osrm.org/route/v1/driving"
-# Where a commute ends: the job core, the airport, and whichever of two piers is nearer.
-DESTINATIONS = [
-    {"name": "Downtown LA", "lon": -118.2560, "lat": 34.0489},
-    {"name": "LAX", "lon": -118.4085, "lat": 33.9416},
-]
-BEACHES = [
-    {"name": "Santa Monica Pier", "lon": -118.4973, "lat": 34.0094},
-    {"name": "Manhattan Beach Pier", "lon": -118.4123, "lat": 33.8840},
-]
+
+# The city being built, from cities/<slug>/city.json (see load_city). Holds the commute
+# destinations (kind "core", "airport", ...), the beaches (the nearer one is routed), the
+# county FIPS for the price index fallback, the state, and the source labels.
+CITY: dict = {}
 
 OFFLINE = False
 PAUSE = 1.0  # seconds between live requests; a full-county run makes a few hundred of them
@@ -73,6 +71,21 @@ WARNINGS: list[str] = []
 def warn(message: str) -> None:
     WARNINGS.append(message)
     print(f"  warning: {message}", file=sys.stderr)
+
+
+def load_city(slug: str) -> dict:
+    path = CITIES / slug / "city.json"
+    if not path.exists():
+        known = ", ".join(sorted(p.name for p in CITIES.iterdir() if (p / "city.json").exists())) if CITIES.exists() else "none"
+        raise SystemExit(f"no city config at {path} (known cities: {known})")
+    city = json.loads(path.read_text(encoding="utf-8"))
+    for key in ("slug", "name", "domain", "sources"):
+        if key not in city:
+            raise SystemExit(f"{path}: missing '{key}'")
+    city.setdefault("state", "CA")
+    city.setdefault("destinations", [])
+    city.setdefault("beaches", [])
+    return city
 
 
 # ---------------------------------------------------------------- fetching
@@ -427,7 +440,7 @@ def load_permits(con: sqlite3.Connection, bbox, zips: list[str], today: date) ->
         "adu": adu,
         "medianValuation": median([r[7] for r in rows if r[7] and r[7] > 1000]),
         "points": points[:1500],
-        "source": "Los Angeles Department of Building and Safety, permits issued in the last 12 months (City of Los Angeles only)",
+        "source": CITY["sources"].get("permits", "Building permits issued in the last 12 months"),
     }
 
 
@@ -604,9 +617,12 @@ def load_hazards(slug: str, bbox, sales: list[dict]) -> dict:
     except Exception as error:  # noqa: BLE001
         warn(f"{slug}: flood zones failed ({error})")
         out["flood"] = None
+    california = CITY.get("state", "CA") == "CA"
+    if not california:
+        warn(f"{slug}: fire and seismic hazard layers are California-only; written as null for {CITY['state']}")
     fire_features = []
-    fire_ok = True
-    for name in ("fireState", "fireLocal"):
+    fire_ok = california
+    for name in ("fireState", "fireLocal") if california else ():
         try:
             layer = arcgis_query(f"{slug}-{name}", LAYERS[name], bbox, "FHSZ,FHSZ_Description", offset=0.00005)
             for feature in layer["features"]:
@@ -626,6 +642,10 @@ def load_hazards(slug: str, bbox, sales: list[dict]) -> dict:
     out["stats"]["shareInFireZone"] = share_inside(points, fire)
     out["stats"]["shareInHighFireZone"] = share_inside(points, fire, lambda f: f["properties"]["severity"] >= 2)
     for name in ("liquefaction", "landslide", "fault"):
+        if not california:
+            out[name] = None
+            out["stats"][f"shareIn{name.capitalize()}"] = None
+            continue
         try:
             layer = arcgis_query(f"{slug}-{name}", LAYERS[name], bbox, "OBJECTID", offset=0.00005)
             for feature in layer["features"]:
@@ -742,9 +762,9 @@ def load_trend(dev: sqlite3.Connection | None, zips: list[str]) -> dict | None:
             used.append(z)
             for year, hpi in rows:
                 series.setdefault(year, []).append(hpi)
-    label = f"ZIP codes {', '.join(used)}" if used else "Los Angeles County"
-    if not used:
-        rows = dev.execute("SELECT year, hpi FROM hpi_county WHERE fips = ? ORDER BY year", (LA_COUNTY_FIPS,)).fetchall()
+    label = f"ZIP codes {', '.join(used)}" if used else f"{CITY['name']} County"
+    if not used and CITY.get("countyFips"):
+        rows = dev.execute("SELECT year, hpi FROM hpi_county WHERE fips = ? ORDER BY year", (CITY["countyFips"],)).fetchall()
         for year, hpi in rows:
             series.setdefault(year, []).append(hpi)
     if not series:
@@ -790,9 +810,14 @@ def haversine_km(a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def load_routes(slug: str, center: list[float]) -> list[dict] | None:
     """Driving routes along real streets from the neighborhood centre to each destination (OSRM, no traffic)."""
-    beach = min(BEACHES, key=lambda b: haversine_km((center[0], center[1]), (b["lon"], b["lat"])))
+    destinations = [dict(d) for d in CITY["destinations"]]
+    if CITY["beaches"]:
+        beach = min(CITY["beaches"], key=lambda b: haversine_km((center[0], center[1]), (b["lon"], b["lat"])))
+        destinations.append({**beach, "kind": "beach"})
+    if not destinations:
+        return None
     routes = []
-    for dest in [*DESTINATIONS, {**beach, "kind": "beach"}]:
+    for dest in destinations:
         try:
             url = f"{OSRM}/{center[0]},{center[1]};{dest['lon']},{dest['lat']}?overview=full&geometries=geojson"
             raw = fetch_json(f"{slug}-route-full-{dest['name']}", url)
@@ -802,6 +827,7 @@ def load_routes(slug: str, center: list[float]) -> list[dict] | None:
             return None
         routes.append({
             "to": dest["name"],
+            "label": dest.get("label", dest["name"]),
             "kind": dest.get("kind", "city"),
             "lon": dest["lon"],
             "lat": dest["lat"],
@@ -857,7 +883,7 @@ def build(config: dict, con: sqlite3.Connection, dev: sqlite3.Connection | None,
         "routes": load_routes(slug, center),
         "sources": {
             "sales": "MLS closed sales, last 12 months, one row per sale (via the data extraction team)",
-            "schools": "California Department of Education school directory 2025-26; LAUSD attendance zones",
+            "schools": CITY["sources"].get("schools", "State school directory and attendance zones"),
             "routes": "Driving routes and times without traffic: OSRM on OpenStreetMap",
         },
     }
@@ -869,16 +895,19 @@ def build(config: dict, con: sqlite3.Connection, dev: sqlite3.Connection | None,
 
 
 def main() -> int:
-    global OFFLINE
+    global OFFLINE, CITY
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--city", default="la", help="city folder under cities/ (default la)")
     parser.add_argument("--only", help="build one neighborhood by slug")
     parser.add_argument("--offline", action="store_true", help="use cached responses only")
     parser.add_argument("--skip-existing", action="store_true", help="leave neighborhoods that already have a data file alone")
     parser.add_argument("--db", default=str(CMA_DB), help="path to cma-local.db")
     parser.add_argument("--dev-db", default=str(DEV_DB), help="path to the link analyser's dev.db (price index, mortgage rates)")
-    parser.add_argument("--out", default=str(OUT))
+    parser.add_argument("--out", help="output folder (default cities/<city>/data)")
     args = parser.parse_args()
     OFFLINE = args.offline
+    CITY = load_city(args.city)
+    print(f"city: {CITY['name']} ({args.city})")
     if not Path(args.db).exists():
         print(f"database not found: {args.db}", file=sys.stderr)
         return 1
@@ -886,13 +915,13 @@ def main() -> int:
     dev = sqlite3.connect(f"file:{args.dev_db}?mode=ro", uri=True) if Path(args.dev_db).exists() else None
     if dev is None:
         warn("dev.db not found: no price trend or mortgage rate")
-    configs = json.loads((HERE / "neighborhoods.json").read_text(encoding="utf-8"))
+    configs = json.loads((CITIES / args.city / "neighborhoods.json").read_text(encoding="utf-8"))
     if args.only:
         configs = [c for c in configs if c["slug"] == args.only]
         if not configs:
             print(f"no neighborhood called {args.only}", file=sys.stderr)
             return 1
-    out_dir = Path(args.out)
+    out_dir = Path(args.out) if args.out else CITIES / args.city / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
     today = date.today()
     index = []
@@ -916,7 +945,7 @@ def main() -> int:
         entry = {"slug": result["slug"], "name": result["name"], "region": result["region"], "center": result["center"],
                  "medianPrice": result["market"]["all"]["medianPrice"], "sales": len(result["sales"])}
         index = [e for e in index if e["slug"] != entry["slug"]] + [entry]
-    order = {c["slug"]: i for i, c in enumerate(json.loads((HERE / "neighborhoods.json").read_text(encoding="utf-8")))}
+    order = {c["slug"]: i for i, c in enumerate(json.loads((CITIES / args.city / "neighborhoods.json").read_text(encoding="utf-8")))}
     index.sort(key=lambda e: order.get(e["slug"], 99))
     index_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
     if WARNINGS:

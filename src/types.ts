@@ -134,7 +134,10 @@ export type Neighborhood = {
 
 export type Route = {
   to: string;
-  kind: "city" | "beach";
+  /** Short form for headlines ("Downtown"); falls back to `to`. */
+  label?: string;
+  /** "core" is the job centre the commute headline is about; "city" is a plain destination. */
+  kind: "core" | "airport" | "beach" | "city";
   lon: number;
   lat: number;
   km: number;

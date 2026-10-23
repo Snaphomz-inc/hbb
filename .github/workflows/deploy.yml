@@ -1,29 +1,65 @@
-name: Deploy la.snaphomz.com
+name: Deploy city sites
 
-# Builds the static site and publishes it to S3 + CloudFront through the CDK stack in cdk/.
+# One job per city folder under cities/: build the site for that city, deploy its CDK stack
+# (S3 + CloudFront + Route 53), sync the build, invalidate, and curl the domain.
 # The shared Snaphomz GitHub OIDC role only trusts the main branch, so this runs on main.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      city:
+        description: "City slug to deploy (blank = every city)"
+        required: false
+        default: ""
 
 concurrency:
-  group: deploy-la
+  group: deploy-cities
   cancel-in-progress: false
 
 env:
   AWS_REGION: us-east-1
   NODE_VERSION: "22"
-  STACK_NAME: LaSiteStack
-  SITE_URL: https://la.snaphomz.com
 
 jobs:
-  build:
-    name: Build site
+  cities:
+    name: List cities
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.list.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read cities/*/city.json
+        id: list
+        env:
+          ONLY: ${{ github.event.inputs.city }}
+        run: |
+          if [ -n "$ONLY" ]; then
+            test -f "cities/$ONLY/city.json" || { echo "::error::no cities/$ONLY/city.json"; exit 1; }
+            MATRIX=$(jq -cn --arg c "$ONLY" '[$c]')
+          else
+            MATRIX=$(ls cities/*/city.json | xargs -n1 dirname | xargs -n1 basename | jq -R . | jq -cs .)
+          fi
+          echo "cities: $MATRIX"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy ${{ matrix.city }}
+    runs-on: ubuntu-latest
+    needs: cities
+    strategy:
+      fail-fast: false
+      matrix:
+        city: ${{ fromJson(needs.cities.outputs.matrix) }}
     permissions:
       contents: read
+      id-token: write
+    env:
+      VITE_CITY: ${{ matrix.city }}
+      CITY: ${{ matrix.city }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,6 +69,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
+
+      - name: Read city config
+        id: city
+        run: |
+          DOMAIN=$(jq -r .domain "cities/$CITY/city.json")
+          echo "domain=$DOMAIN" >> "$GITHUB_OUTPUT"
+          echo "stack=SiteStack-$CITY" >> "$GITHUB_OUTPUT"
+          echo "deploying $CITY to https://$DOMAIN"
 
       - name: Install
         run: npm ci
@@ -46,32 +90,7 @@ jobs:
             echo "::warning::VITE_GOOGLE_MAPS_KEY secret is not set; building without the Google 3D look-around."
           fi
           npm run build
-
-      - name: Upload build
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: dist/
-          retention-days: 3
-
-  infrastructure:
-    name: Deploy infrastructure
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      distribution_id: ${{ steps.outputs.outputs.distribution_id }}
-      bucket: ${{ steps.outputs.outputs.bucket }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+          test -f dist/data/index.json
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -90,10 +109,12 @@ jobs:
 
       - name: CDK deploy
         working-directory: cdk
-        run: npx cdk deploy ${{ env.STACK_NAME }} --require-approval never
+        run: npx cdk deploy ${{ steps.city.outputs.stack }} -c city=$CITY --require-approval never
 
       - name: Read stack outputs
         id: outputs
+        env:
+          STACK_NAME: ${{ steps.city.outputs.stack }}
         run: |
           DIST_ID=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?Description=='CloudFront distribution ID'].OutputValue" --output text)
           BUCKET=$(aws cloudformation describe-stacks --stack-name "$STACK_NAME" --query "Stacks[0].Outputs[?Description=='S3 bucket for static site'].OutputValue" --output text)
@@ -101,30 +122,9 @@ jobs:
           echo "distribution_id=${DIST_ID}" >> "$GITHUB_OUTPUT"
           echo "bucket=${BUCKET}" >> "$GITHUB_OUTPUT"
 
-  publish:
-    name: Publish to S3
-    runs-on: ubuntu-latest
-    needs: infrastructure
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Download build
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::075502422618:role/SnaphomzGitHubOIDCRole
-          aws-region: ${{ env.AWS_REGION }}
-          audience: sts.amazonaws.com
-
       - name: Sync to S3
         env:
-          BUCKET: ${{ needs.infrastructure.outputs.bucket }}
+          BUCKET: ${{ steps.outputs.outputs.bucket }}
         run: |
           # Hashed assets are immutable; index.html and the data files are not hashed and must revalidate.
           aws s3 sync dist/ "s3://$BUCKET/" --delete \
@@ -135,14 +135,11 @@ jobs:
             --exclude "*" --include "index.html" --include "*.json"
 
       - name: Invalidate CloudFront
-        run: aws cloudfront create-invalidation --distribution-id ${{ needs.infrastructure.outputs.distribution_id }} --paths "/*"
+        run: aws cloudfront create-invalidation --distribution-id ${{ steps.outputs.outputs.distribution_id }} --paths "/*"
 
-  verify:
-    name: Verify
-    runs-on: ubuntu-latest
-    needs: publish
-    steps:
       - name: Check the site answers
+        env:
+          SITE_URL: https://${{ steps.city.outputs.domain }}
         run: |
           sleep 45
           for i in 1 2 3 4 5 6; do

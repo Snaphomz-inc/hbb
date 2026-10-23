@@ -9,19 +9,18 @@ lat/lon/time columns for its Particles effect (events, heat, flows). This writes
   exports/atlas/permits.csv             building permit points (City of Los Angeles only)
   exports/atlas/schools.csv             schools with enrollment
 
-Run from the package root after `npm run data`:  python -I scripts/export_atlas.py
+Run from the package root after `npm run data`:  python -I scripts/export_atlas.py [--city la]
 """
 
 from __future__ import annotations
 
+import argparse
 import csv
 import json
 from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "public" / "data"
-OUT = ROOT / "exports" / "atlas"
 KIND = {0: "house", 1: "condo", 2: "other"}
 
 
@@ -31,6 +30,13 @@ def approx_date(built_at: str, months_ago: int) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Export a city's built data as Atlas import files")
+    parser.add_argument("--city", default="la", help="city folder under cities/ (default la)")
+    city = parser.parse_args().city
+    DATA = ROOT / "cities" / city / "data"
+    OUT = ROOT / "exports" / "atlas" / city
+    if not (DATA / "index.json").exists():
+        raise SystemExit(f"no built data at {DATA}; run the data build first")
     OUT.mkdir(parents=True, exist_ok=True)
     index = json.loads((DATA / "index.json").read_text(encoding="utf-8"))
     points, areas = [], []

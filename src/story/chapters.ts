@@ -68,7 +68,7 @@ function routeLabels(data: Neighborhood): Label[] {
     lat: route.lat,
     title: route.to,
     value: `${route.minutes} min · ${(route.km * MILES).toFixed(0)} mi`,
-    tone: route.kind === "beach" ? ("blue" as Tone) : route.to === "LAX" ? ("white" as Tone) : ("lime" as Tone),
+    tone: route.kind === "beach" ? ("blue" as Tone) : route.kind === "airport" ? ("white" as Tone) : ("lime" as Tone),
   }));
 }
 
@@ -333,13 +333,13 @@ export function buildChapters(data: Neighborhood): Chapter[] {
     const hoodWidth = data.bounds[1][0] - data.bounds[0][0];
     // Latitude degrees are longer than longitude degrees here, and the viewport is wider than tall.
     const routeWidth = Math.max(east - west, ((north - south) * 1.2) / 1.6);
-    const downtown = routes.find((r) => r.to === "Downtown LA") ?? routes[0];
+    const core = routes.find((r) => r.kind === "core") ?? routes[0];
     chapters.push({
       id: "commute",
       kind: "story",
       question: "How far is everything?",
-      headline: `Downtown in ${downtown.minutes} minutes.`,
-      accent: `${downtown.minutes} minutes`,
+      headline: `${core.label ?? core.to} in ${core.minutes} minutes.`,
+      accent: `${core.minutes} minutes`,
       // Pitched, the bottom of the screen covers less ground than the top, so sit the camera nearer the southern end;
       // the stats column hides the right edge on desktop, so nudge east.
       camera: { center: [(west + east) / 2 + (east - west) * 0.07, south + (north - south) * 0.3], zoomDelta: Math.log2(hoodWidth / routeWidth) - 0.6, pitch: 40, bearing: base.bearing - 10 },
@@ -351,7 +351,7 @@ export function buildChapters(data: Neighborhood): Chapter[] {
           label: route.kind === "beach" ? `To the beach (${route.to})` : `To ${route.to}`,
           value: `${route.minutes} min`,
           note: `${(route.km * MILES).toFixed(1)} miles by car, without traffic`,
-          tone: route.kind === "beach" ? ("blue" as Tone) : route.to === "Downtown LA" ? ("lime" as Tone) : undefined,
+          tone: route.kind === "beach" ? ("blue" as Tone) : route.kind === "core" ? ("lime" as Tone) : undefined,
         })),
         ...(commuteStat ? [commuteStat] : []),
       ],

@@ -8,7 +8,7 @@ a whole neighborhood and from real public and MLS data instead of a hand-made sc
 
 43 Los Angeles neighborhoods are built, grouped by region (Westside; Beverly Hills and
 West Hollywood; San Fernando Valley; Glendale, Burbank and the foothills; South Bay).
-Add one by appending to `scripts/neighborhoods.json` and rerunning the data build;
+Add one by appending to `cities/la/neighborhoods.json` and rerunning the data build;
 `"byZip": true` narrows an MLS city (the City of Los Angeles) to the listed ZIPs.
 A full rebuild makes a few hundred requests and takes about ten minutes; cached
 responses make later runs free, and `--skip-existing` resumes an interrupted run.
@@ -21,7 +21,7 @@ median price and listed by region; click a dot or a row to fly into its story
 
 ```bash
 npm install
-npm run data      # builds public/data/*.json (needs the CMA database, see below)
+npm run data      # builds cities/la/data/*.json (needs the CMA database, see below)
 npm run dev       # http://localhost:5190
 ```
 
@@ -105,21 +105,45 @@ out and the story camera glides from wherever you left off back to its chapter. 
 distance, tilting toward the horizon and wheeling a little, and Google's mesh fades in on the
 view it lands on, the mirror of the glide back out. Without the key nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
 
-## Deploying (la.snaphomz.com)
+## Cities
 
-The site is static, so it ships the same way as the other Snaphomz static sites: a private S3
+One codebase, one city per build. A city is a folder under `cities/`:
+
+```
+cities/la/city.json           name, domain, headline, state, county FIPS, commute destinations, source labels
+cities/la/neighborhoods.json  the areas to build (slug, name, region, tagline, MLS cities, ZIPs, camera)
+cities/la/data/               the built data files, committed (index.json + one file per neighborhood)
+```
+
+`VITE_CITY` picks the city for the dev server and the build (default `la`; set it in `.env` or
+the environment). The build inlines that city's `city.json` as `__CITY__` (see `src/city.ts`),
+fills `%CITY_NAME%` in `index.html`, and ships `cities/<city>/data` as `/data/`. The data build
+takes the same choice: `python -I scripts/build_neighborhood.py --city la`.
+
+To add a city: create `cities/<slug>/city.json` and `neighborhoods.json` (copy LA's and edit),
+point `--db` at that city's CMA database, run the data build, check it with
+`VITE_CITY=<slug> npm run dev`, and commit. The deploy workflow picks the new folder up on its
+own and stands up `<domain>` from `city.json`. The FEMA, EPA, Census, OpenStreetMap and OSRM
+sources are national; the fire and seismic layers are California services and are written as
+null for a city in another state (the risk chapter then says so rather than showing "no risk").
+
+## Deploying
+
+The sites are static, so they ship the same way as the other Snaphomz static sites: a private S3
 bucket behind CloudFront, with the certificate and the Route 53 alias managed by the CDK stack
-in `cdk/` (`LaSiteStack`, us-east-1, existing `snaphomz.com` hosted zone).
+in `cdk/` (`SiteStack-<city>`, us-east-1, existing `snaphomz.com` hosted zone; the domain comes
+from the city's `city.json`, so `cdk deploy -c city=la`).
 
-`.github/workflows/deploy.yml` runs on every push to `main` (or by hand from the Actions tab):
-build, `cdk deploy`, sync `dist/` to the bucket, invalidate CloudFront, then curl the site.
-Hashed assets are uploaded as immutable; `index.html` and the `data/*.json` files revalidate.
-It authenticates through the organisation's GitHub OIDC role, which only trusts `main`, so a
-push to any other branch builds nothing and deploys nothing.
+`.github/workflows/deploy.yml` runs on every push to `main` (or by hand from the Actions tab,
+optionally for one city). It lists `cities/*/city.json` and runs one job per city: build with
+`VITE_CITY`, `cdk deploy`, sync `dist/` to the bucket, invalidate CloudFront, then curl the
+domain. Hashed assets are uploaded as immutable; `index.html` and the `data/*.json` files
+revalidate. It authenticates through the organisation's GitHub OIDC role, which only trusts
+`main`, so a push to any other branch builds nothing and deploys nothing.
 
 One repository secret is needed for the Google 3D look-around: `VITE_GOOGLE_MAPS_KEY`, a
-browser key with the Maps JavaScript API enabled and its HTTP referrer restricted to
-`https://la.snaphomz.com/*`. Without it the build still succeeds and the feature is absent.
+browser key with the Maps JavaScript API enabled and its HTTP referrers restricted to
+`https://*.snaphomz.com/*`. Without it the build still succeeds and the feature is absent.
 
 Before a wide release, swap the Esri World Imagery base in `src/map/style.ts` for licensed
 imagery; the public Esri endpoint is not licensed for production.

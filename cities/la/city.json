@@ -1,0 +1,21 @@
+{
+  "slug": "la",
+  "name": "Los Angeles",
+  "domain": "la.snaphomz.com",
+  "headline": "Know Los Angeles before you buy.",
+  "state": "CA",
+  "countyFips": "06037",
+  "destinations": [
+    { "name": "Downtown LA", "label": "Downtown", "kind": "core", "lon": -118.256, "lat": 34.0489 },
+    { "name": "LAX", "kind": "airport", "lon": -118.4085, "lat": 33.9416 }
+  ],
+  "beaches": [
+    { "name": "Santa Monica Pier", "lon": -118.4973, "lat": 34.0094 },
+    { "name": "Manhattan Beach Pier", "lon": -118.4123, "lat": 33.884 }
+  ],
+  "sources": {
+    "permits": "Los Angeles Department of Building and Safety, permits issued in the last 12 months (City of Los Angeles only)",
+    "schools": "California Department of Education school directory 2025-26; LAUSD attendance zones",
+    "credits": "MLS closed sales · FEMA · CAL FIRE · California Geological Survey · EPA · OpenStreetMap · Census · U.S. DOT · FHFA · Freddie Mac"
+  }
+}

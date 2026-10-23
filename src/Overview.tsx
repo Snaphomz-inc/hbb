@@ -5,6 +5,7 @@ import { useScramble } from "./lib/scramble";
 import { collapseAttribution, mapAlive } from "./map/MapScene";
 import { baseStyle } from "./map/style";
 import type { IndexEntry } from "./types";
+import { city } from "./city";
 
 const SOURCE = "neighborhoods";
 
@@ -24,7 +25,7 @@ export function Overview({ index, onPick }: { index: IndexEntry[]; onPick: (slug
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const headline = useScramble("Know Los Angeles before you buy.", 900);
+  const headline = useScramble(city.headline, 900);
 
   const regions = useMemo(() => {
     const groups = new Map<string, IndexEntry[]>();
@@ -165,7 +166,7 @@ export function Overview({ index, onPick }: { index: IndexEntry[]; onPick: (slug
 
   return (
     <>
-      <div ref={container} className="map map-live" aria-label="Map of Los Angeles neighborhoods" />
+      <div ref={container} className="map map-live" aria-label={`Map of ${city.name} neighborhoods`} />
       <div className="overview show">
         <div className="overview-head">
           <h1>{headline}</h1>
@@ -205,7 +206,7 @@ export function Overview({ index, onPick }: { index: IndexEntry[]; onPick: (slug
             </section>
           ))}
           <p className="overview-foot">
-            Built from MLS closed sales (last 12 months), FEMA, CAL FIRE, the California Geological Survey, EPA, OpenStreetMap, the Census, U.S. DOT, FHFA and Freddie Mac.
+            Built from {city.credits.replaceAll(" · ", ", ")}.
           </p>
         </div>
       </div>
