@@ -1,0 +1,21 @@
+{
+  "name": "la-site-cdk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CDK stack for la.snaphomz.com (S3 + CloudFront + Route 53)",
+  "scripts": {
+    "synth": "cdk synth",
+    "deploy": "cdk deploy LaSiteStack --require-approval never",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.200.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "aws-cdk": "^2.1146.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
+  }
+}

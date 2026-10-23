@@ -105,6 +105,25 @@ out and the story camera glides from wherever you left off back to its chapter. 
 distance, tilting toward the horizon and wheeling a little, and Google's mesh fades in on the
 view it lands on, the mirror of the glide back out. Without the key nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
 
+## Deploying (la.snaphomz.com)
+
+The site is static, so it ships the same way as the other Snaphomz static sites: a private S3
+bucket behind CloudFront, with the certificate and the Route 53 alias managed by the CDK stack
+in `cdk/` (`LaSiteStack`, us-east-1, existing `snaphomz.com` hosted zone).
+
+`.github/workflows/deploy.yml` runs on every push to `main` (or by hand from the Actions tab):
+build, `cdk deploy`, sync `dist/` to the bucket, invalidate CloudFront, then curl the site.
+Hashed assets are uploaded as immutable; `index.html` and the `data/*.json` files revalidate.
+It authenticates through the organisation's GitHub OIDC role, which only trusts `main`, so a
+push to any other branch builds nothing and deploys nothing.
+
+One repository secret is needed for the Google 3D look-around: `VITE_GOOGLE_MAPS_KEY`, a
+browser key with the Maps JavaScript API enabled and its HTTP referrer restricted to
+`https://la.snaphomz.com/*`. Without it the build still succeeds and the feature is absent.
+
+Before a wide release, swap the Esri World Imagery base in `src/map/style.ts` for licensed
+imagery; the public Esri endpoint is not licensed for production.
+
 ## Export for After Effects (Atlas)
 
 `npm run export:atlas` writes `exports/atlas/` (git-ignored) from the built data: one GeoJSON
