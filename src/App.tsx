@@ -1,7 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
-import { Explore, exploreAvailable, type ViewCamera } from "./explore/Explore";
+import { Explore, exploreAvailable, preloadMaps3d, type ViewCamera } from "./explore/Explore";
 import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
@@ -164,9 +164,6 @@ export function App() {
   const lastCamera = useRef("");
   // The look-around view (Google 3D) opens on the story's current camera and hands its own back on exit.
   const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
-  const exploreRef = useRef(explore);
-  exploreRef.current = explore;
-  const exploreCamera = useRef<ViewCamera | null>(null);
   const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
 
   useEffect(() => {
@@ -223,11 +220,7 @@ export function App() {
         pitch: lerp(a.pitch, b.pitch, t),
         bearing: lerpAngle(a.bearing, b.bearing, t) + drift,
       };
-      // While Google has the screen, hold still; afterwards glide from wherever it left us back to the story.
-      if (exploreRef.current === "on") {
-        frame = requestAnimationFrame(tick);
-        return;
-      }
+      // After look-around, glide from wherever Google left us back to the story.
       const back = resume.current;
       if (back) {
         const k = Math.min(1, (now - back.at) / 1400);
@@ -262,12 +255,15 @@ export function App() {
     window.location.hash = next ? `/${next}` : "/";
   };
 
+  /** The story camera as Google needs it, read live so the handover matches whatever is on screen. */
+  const readCamera = (): ViewCamera => {
+    const centre = map!.getCenter();
+    const exaggeration = map!.getTerrain()?.exaggeration ?? 1;
+    const altitude = (map!.queryTerrainElevation(centre) ?? 0) / exaggeration;
+    return { center: [centre.lng, centre.lat], zoom: map!.getZoom(), pitch: map!.getPitch(), bearing: map!.getBearing(), altitude };
+  };
   const enterExplore = () => {
     if (!map || !exploreAvailable || explore !== "off" || !mapAlive(map)) return;
-    const centre = map.getCenter();
-    const exaggeration = map.getTerrain()?.exaggeration ?? 1;
-    const altitude = (map.queryTerrainElevation(centre) ?? 0) / exaggeration;
-    exploreCamera.current = { center: [centre.lng, centre.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), altitude };
     setExplore("on");
   };
   const enterExploreRef = useRef(enterExplore);
@@ -279,13 +275,17 @@ export function App() {
     window.setTimeout(() => setExplore("off"), 500);
   };
 
-  // A click on the map itself is the quiet way in.
+  // A click on the map itself is the quiet way in. Google's script is fetched early so the way in is short.
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
     const canvas = map.getCanvas();
     const onClick = () => enterExploreRef.current();
     canvas.addEventListener("click", onClick);
-    return () => canvas.removeEventListener("click", onClick);
+    const warm = window.setTimeout(preloadMaps3d, 2500);
+    return () => {
+      canvas.removeEventListener("click", onClick);
+      window.clearTimeout(warm);
+    };
   }, [map]);
 
   const chapter: Chapter | undefined = chapters[position.active];
@@ -460,7 +460,7 @@ export function App() {
               <span className="look-around-icon" aria-hidden="true">⤢</span>look around
             </button>
           )}
-          {explore !== "off" && exploreCamera.current && <Explore camera={exploreCamera.current} closing={explore === "closing"} onExit={exitExplore} />}
+          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} onExit={exitExplore} />}
         </>
       )}
     </>

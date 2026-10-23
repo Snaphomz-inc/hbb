@@ -1070,7 +1070,84 @@ select {
   position: absolute;
   inset: 0;
   opacity: 0;
-  transition: opacity 650ms ease;
+  transition: opacity 1100ms ease;
+}
+
+/* While Google loads: the story view keeps drifting underneath, the edges dim, and a label says what is coming. */
+.explore-veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(11, 18, 32, 0) 40%, rgba(11, 18, 32, 0.6) 100%);
+  opacity: 1;
+  transition: opacity 900ms ease;
+  pointer-events: none;
+}
+
+.explore.show .explore-veil {
+  opacity: 0;
+}
+
+.explore-loading {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  opacity: 1;
+  transition: opacity 500ms ease;
+  pointer-events: none;
+}
+
+.explore.show .explore-loading {
+  opacity: 0;
+}
+
+.explore-loading-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+}
+
+.explore-loading-bar {
+  position: relative;
+  width: 200px;
+  height: 2px;
+  margin: 12px auto 0;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  border-radius: 1px;
+}
+
+.explore-loading-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 70px;
+  height: 100%;
+  background: var(--lime);
+  animation: explore-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes explore-slide {
+  from {
+    transform: translateX(-70px);
+  }
+  to {
+    transform: translateX(200px);
+  }
+}
+
+.explore-hint {
+  opacity: 0;
+  transition: opacity 600ms ease 400ms;
+}
+
+.explore.show .explore-hint {
+  opacity: 1;
 }
 
 .explore.show .explore-map {

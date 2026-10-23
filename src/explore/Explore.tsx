@@ -78,11 +78,21 @@ function loadMaps3d(): Promise<Record<string, unknown>> {
   return loading;
 }
 
+/** Fetch the Google script while the story plays, so entering look-around only waits for tiles. */
+export function preloadMaps3d(): void {
+  if (KEY) loadMaps3d().catch(() => undefined);
+}
+
 type Map3D = HTMLElement & GoogleCamera;
 
-export function Explore({ camera, closing, onExit }: { camera: ViewCamera; closing: boolean; onExit: (camera: ViewCamera) => void }) {
+/**
+ * `getCamera` is read twice: when Google is created, and again the moment its mesh is ready, so the
+ * story view can keep drifting underneath while tiles load and the crossfade still lines up.
+ */
+export function Explore({ getCamera, closing, onExit }: { getCamera: () => ViewCamera; closing: boolean; onExit: (camera: ViewCamera) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map3D | null>(null);
+  const opened = useRef<ViewCamera>(getCamera());
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
 
   useEffect(() => {
@@ -93,21 +103,26 @@ export function Explore({ camera, closing, onExit }: { camera: ViewCamera; closi
         if (!alive || !host.current) return;
         const Map3DElement = lib.Map3DElement as new (options: Record<string, unknown>) => Map3D;
         const MapMode = lib.MapMode as Record<string, string>;
-        const map3d = new Map3DElement({ ...toGoogle(camera, height), mode: MapMode.HYBRID, defaultUIDisabled: true, gestureHandling: "GREEDY" });
+        const map3d = new Map3DElement({ ...toGoogle(opened.current, height), mode: MapMode.HYBRID, defaultUIDisabled: true, gestureHandling: "GREEDY" });
         mapRef.current = map3d;
         host.current.append(map3d);
         let shown = false;
         const show = () => {
-          if (!shown && alive) {
-            shown = true;
-            setState("ready");
-          }
+          if (shown || !alive) return;
+          shown = true;
+          // Catch up with the story's drift, give the mesh a beat to settle on it, then crossfade.
+          const now = toGoogle(getCamera(), height);
+          map3d.center = now.center;
+          map3d.range = now.range;
+          map3d.tilt = now.tilt;
+          map3d.heading = now.heading;
+          setTimeout(() => alive && setState("ready"), 350);
         };
-        // Fade in once the mesh has settled; or after a moment regardless, so a slow network still shows something.
         map3d.addEventListener("gmp-steadychange", (event) => {
           if ((event as Event & { isSteady?: boolean }).isSteady) show();
         });
-        setTimeout(show, 3000);
+        // A slow network still gets the view after a few seconds.
+        setTimeout(show, 4500);
       })
       .catch(() => {
         if (alive) setState("failed");
@@ -126,7 +141,7 @@ export function Explore({ camera, closing, onExit }: { camera: ViewCamera; closi
     if (map3d && map3d.center && state === "ready") {
       onExit(fromGoogle({ center: map3d.center, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, window.innerHeight));
     } else {
-      onExit(camera);
+      onExit(opened.current);
     }
   };
 
@@ -140,15 +155,16 @@ export function Explore({ camera, closing, onExit }: { camera: ViewCamera; closi
 
   return (
     <div className={`explore ${state === "ready" ? "show" : ""} ${closing ? "closing" : ""}`}>
+      <div className="explore-veil" />
       <div ref={host} className="explore-map" />
+      <div className="explore-loading" aria-live="polite">
+        <div className="explore-loading-label">{state === "failed" ? "Google 3D could not load here" : "Opening Google 3D"}</div>
+        {state === "loading" && <div className="explore-loading-bar" />}
+      </div>
       <button className="explore-exit" onClick={exit}>
         Back to the story
       </button>
-      <div className="explore-hint">
-        {state === "loading" && "Loading Google 3D…"}
-        {state === "failed" && "Google 3D could not load here"}
-        {state === "ready" && "scroll to zoom · drag to look around · esc to return"}
-      </div>
+      <div className="explore-hint">scroll to zoom · drag to look around · esc to return</div>
     </div>
   );
 }
