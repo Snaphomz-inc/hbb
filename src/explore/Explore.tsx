@@ -27,8 +27,13 @@ declare global {
 const KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY;
 export const exploreAvailable = Boolean(KEY);
 
-/** MapLibre's camera sits 1.5 viewport heights from the centre (36.87° vertical field of view). */
-const CAMERA_HEIGHTS = 1.5;
+/**
+ * Google's range (camera to centre, metres) that shows the same ground as MapLibre's view.
+ * MapLibre's camera sits 1.5 viewport heights from the centre (36.87° vertical field of view);
+ * Google's field of view is wider, and 1.0 viewport heights matched the frame when checked
+ * side by side over Glendale (freeways and ridge lines in the same screen positions).
+ */
+const CAMERA_HEIGHTS = 1.0;
 const EQUATOR_METERS_PER_PIXEL = 156543.03392;
 
 function metersPerPixel(lat: number, zoom: number): number {
@@ -88,7 +93,7 @@ export function Explore({ camera, closing, onExit }: { camera: ViewCamera; closi
         if (!alive || !host.current) return;
         const Map3DElement = lib.Map3DElement as new (options: Record<string, unknown>) => Map3D;
         const MapMode = lib.MapMode as Record<string, string>;
-        const map3d = new Map3DElement({ ...toGoogle(camera, height), mode: MapMode.HYBRID, defaultUIDisabled: true });
+        const map3d = new Map3DElement({ ...toGoogle(camera, height), mode: MapMode.HYBRID, defaultUIDisabled: true, gestureHandling: "GREEDY" });
         mapRef.current = map3d;
         host.current.append(map3d);
         let shown = false;

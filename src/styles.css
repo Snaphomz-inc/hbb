@@ -1155,3 +1155,10 @@ html.exploring .look-around {
     display: none;
   }
 }
+
+/* Panels that are faded out must not catch clicks meant for the map. */
+.hero:not(.show) > *,
+.closing:not(.show) > *,
+.story:not(.show) .stats {
+  pointer-events: none;
+}
