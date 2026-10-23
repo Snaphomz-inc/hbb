@@ -3,3 +3,4 @@ dist
 scripts/cache
 .env
 .env.local
+exports

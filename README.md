@@ -79,6 +79,17 @@ with `VITE_BASE=/neighborhoods/ npm run build`. Neighborhoods are addressed by h
   cache is cleared.
 - **Phone layout** has been styled but should be checked on a real device.
 
+## Export for After Effects (Atlas)
+
+`npm run export:atlas` writes `exports/atlas/` (git-ignored) from the built data: one GeoJSON
+of neighborhood points (name, region, median price, sales, camera), one of their bounding
+boxes, and CSVs of sales (with an approximate date, to the 30-day bucket), permit points and
+schools, each with `lat`/`lon` columns. These are the formats the Atlas plugin for After
+Effects imports: drop the GeoJSON in for pins, labels and areas, and the sales CSV into
+Atlas Particles as timed events or a heat layer. Rendered video from Atlas can sit next to
+the live site (a promo film, a per-neighborhood clip) but cannot replace it: Atlas renders
+frames inside After Effects and has no interactive or web output.
+
 ## Known limits
 
 - Permits cover the City of Los Angeles only; cities that issue their own (Santa
