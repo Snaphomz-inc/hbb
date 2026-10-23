@@ -56,9 +56,7 @@ export function baseStyle(): StyleSpecification {
           "fill-extrusion-color": "#e9e4d8",
           "fill-extrusion-height": ["coalesce", ["get", "render_height"], 6],
           "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-          // Hidden during the story; raiseBuildings() in MapScene grows them on the way into look-around.
-          "fill-extrusion-opacity": 0,
-          "fill-extrusion-opacity-transition": { duration: 600, delay: 0 },
+          "fill-extrusion-opacity": 0.62,
           "fill-extrusion-vertical-gradient": true,
         },
       },

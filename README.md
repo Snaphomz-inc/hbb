@@ -101,9 +101,9 @@ key with the Maps JavaScript API enabled), the story gains a quiet way out of th
 map, or the small "look around" pill at the bottom right. Google's photorealistic 3D mesh fades in
 on exactly the camera the story was showing (same centre, distance, tilt and heading), the page
 stops scrolling, and the wheel zooms while dragging turns. "Back to the story" or Esc fades Google
-out and the story camera glides from wherever you left off back to its chapter. On the way in the story camera pushes closer and lower over two seconds while the
-block buildings (hidden during the story) rise out of the imagery, and only then does Google's
-mesh fade over them. Without the key nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
+out and the story camera glides from wherever you left off back to its chapter. On the way in, while Google loads, the story camera dives for three seconds, halving its
+distance, tilting toward the horizon and wheeling a little, and Google's mesh fades in on the
+view it lands on, the mirror of the glide back out. Without the key nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
 
 ## Export for After Effects (Atlas)
 

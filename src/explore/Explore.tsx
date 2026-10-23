@@ -30,10 +30,11 @@ export const exploreAvailable = Boolean(KEY);
 /**
  * Google's range (camera to centre, metres) that shows the same ground as MapLibre's view.
  * MapLibre's camera sits 1.5 viewport heights from the centre (36.87° vertical field of view);
- * Google's field of view is wider, and 1.0 viewport heights matched the frame when checked
- * side by side over Glendale (freeways and ridge lines in the same screen positions).
+ * Google's field of view is wider. 0.8 viewport heights matched the frame when the two were
+ * toggled over each other at the dive's landing camera (tilt 60-64) over Glendale and over the
+ * county-wide commute view: freeways, parks and ridge lines in the same screen positions.
  */
-const CAMERA_HEIGHTS = 1.0;
+const CAMERA_HEIGHTS = 0.8;
 const EQUATOR_METERS_PER_PIXEL = 156543.03392;
 
 function metersPerPixel(lat: number, zoom: number): number {
@@ -111,8 +112,8 @@ export function Explore({ getCamera, closing, minWait = 0, onExit }: { getCamera
         const show = () => {
           if (shown || !alive) return;
           shown = true;
-          // Let the story's own move (push-in, rising buildings) finish, catch up with where the camera
-          // ended, give the mesh a beat to settle on it, then crossfade.
+          // Let the story's own move (the dive) finish, catch up with where the camera ended, give the
+          // mesh a beat to settle on it, then crossfade.
           const wait = Math.max(0, mountedAt + minWait - performance.now());
           setTimeout(() => {
             if (!alive) return;
