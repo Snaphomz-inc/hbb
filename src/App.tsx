@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
+import { Explore, exploreAvailable, type ViewCamera } from "./explore/Explore";
 import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
@@ -161,6 +162,12 @@ export function App() {
   const chapters = useMemo(() => (data ? buildChapters(data) : []), [data]);
   const { position, positionRef } = useScrollStory(chapters);
   const lastCamera = useRef("");
+  // The look-around view (Google 3D) opens on the story's current camera and hands its own back on exit.
+  const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
+  const exploreRef = useRef(explore);
+  exploreRef.current = explore;
+  const exploreCamera = useRef<ViewCamera | null>(null);
+  const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
 
   useEffect(() => {
     fetch(`${DATA_BASE}/index.json`)
@@ -216,6 +223,21 @@ export function App() {
         pitch: lerp(a.pitch, b.pitch, t),
         bearing: lerpAngle(a.bearing, b.bearing, t) + drift,
       };
+      // While Google has the screen, hold still; afterwards glide from wherever it left us back to the story.
+      if (exploreRef.current === "on") {
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+      const back = resume.current;
+      if (back) {
+        const k = Math.min(1, (now - back.at) / 1400);
+        const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+        camera.center = [lerp(back.from.center[0], camera.center[0], e), lerp(back.from.center[1], camera.center[1], e)];
+        camera.zoom = lerp(back.from.zoom, camera.zoom, e);
+        camera.pitch = lerp(back.from.pitch, camera.pitch, e);
+        camera.bearing = lerpAngle(back.from.bearing, camera.bearing, e);
+        if (k >= 1) resume.current = null;
+      }
       const key = `${camera.center[0].toFixed(6)},${camera.center[1].toFixed(6)},${camera.zoom.toFixed(4)},${camera.pitch.toFixed(2)},${camera.bearing.toFixed(2)}`;
       if (key !== lastCamera.current) {
         map.jumpTo(camera);
@@ -239,6 +261,32 @@ export function App() {
     }
     window.location.hash = next ? `/${next}` : "/";
   };
+
+  const enterExplore = () => {
+    if (!map || !exploreAvailable || explore !== "off" || !mapAlive(map)) return;
+    const centre = map.getCenter();
+    const exaggeration = map.getTerrain()?.exaggeration ?? 1;
+    const altitude = (map.queryTerrainElevation(centre) ?? 0) / exaggeration;
+    exploreCamera.current = { center: [centre.lng, centre.lat], zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing(), altitude };
+    setExplore("on");
+  };
+  const enterExploreRef = useRef(enterExplore);
+  enterExploreRef.current = enterExplore;
+  const exitExplore = (camera: ViewCamera) => {
+    if (explore !== "on") return;
+    resume.current = { from: { ...camera, pitch: Math.min(80, Math.max(0, camera.pitch)) }, at: performance.now() };
+    setExplore("closing");
+    window.setTimeout(() => setExplore("off"), 500);
+  };
+
+  // A click on the map itself is the quiet way in.
+  useEffect(() => {
+    if (!map || !mapAlive(map)) return;
+    const canvas = map.getCanvas();
+    const onClick = () => enterExploreRef.current();
+    canvas.addEventListener("click", onClick);
+    return () => canvas.removeEventListener("click", onClick);
+  }, [map]);
 
   const chapter: Chapter | undefined = chapters[position.active];
   const settled = position.progress > 0.06 || position.active === 0;
@@ -406,6 +454,13 @@ export function App() {
           <div className="progress">
             <div className="progress-bar" style={{ transform: `scaleX(${position.overall})` }} />
           </div>
+
+          {exploreAvailable && (
+            <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
+              <span className="look-around-icon" aria-hidden="true">⤢</span>look around
+            </button>
+          )}
+          {explore !== "off" && exploreCamera.current && <Explore camera={exploreCamera.current} closing={explore === "closing"} onExit={exitExplore} />}
         </>
       )}
     </>

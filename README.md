@@ -94,6 +94,16 @@ Three ideas from the Atlas After Effects plugin, rebuilt live in MapLibre:
 
 All three stop under `prefers-reduced-motion`.
 
+## Look around (Google 3D)
+
+With `VITE_GOOGLE_MAPS_KEY` set in `.env` (see `.env.example`; a Google Maps Platform browser
+key with the Maps JavaScript API enabled), the story gains a quiet way out of the rails: click the
+map, or the small "look around" pill at the bottom right. Google's photorealistic 3D mesh fades in
+on exactly the camera the story was showing (same centre, distance, tilt and heading), the page
+stops scrolling, and the wheel zooms while dragging turns. "Back to the story" or Esc fades Google
+out and the story camera glides from wherever you left off back to its chapter. Without the key
+nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
+
 ## Export for After Effects (Atlas)
 
 `npm run export:atlas` writes `exports/atlas/` (git-ignored) from the built data: one GeoJSON

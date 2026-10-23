@@ -1019,3 +1019,139 @@ select {
     margin-top: 5px;
   }
 }
+
+/* Look around: the quiet way into Google's 3D mesh, and the view itself. */
+.look-around {
+  position: fixed;
+  right: 46px;
+  bottom: 14px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.78);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  transition: opacity 400ms ease, border-color 200ms, color 200ms;
+}
+
+.look-around.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.look-around:hover {
+  border-color: var(--lime);
+  color: #fff;
+}
+
+.look-around-icon {
+  color: var(--lime);
+  margin-right: 6px;
+  font-size: 13px;
+}
+
+.explore {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.explore-map {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 650ms ease;
+}
+
+.explore.show .explore-map {
+  opacity: 1;
+}
+
+.explore.closing .explore-map {
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+
+.explore-map gmp-map-3d {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.explore-exit {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 9px 14px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transition: border-color 200ms;
+}
+
+.explore-exit:hover {
+  border-color: var(--lime);
+}
+
+.explore-hint {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+}
+
+html.exploring {
+  overflow: hidden;
+}
+
+html.exploring .top,
+html.exploring .hero,
+html.exploring .story,
+html.exploring .closing,
+html.exploring .question-wrap,
+html.exploring .scroll-hint,
+html.exploring .progress,
+html.exploring .labels,
+html.exploring .look-around {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 500ms ease;
+}
+
+@media (max-width: 900px) {
+  .look-around {
+    right: 40px;
+    bottom: 10px;
+    padding: 6px 10px;
+  }
+  .explore-hint {
+    display: none;
+  }
+}
