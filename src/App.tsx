@@ -6,12 +6,22 @@ import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
 import { useScramble } from "./lib/scramble";
-import { MapScene, mapAlive, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
+import { MapScene, lowerBuildings, mapAlive, raiseBuildings, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
 import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
+
+/** The way into look-around: the camera pushes in this much zoom, over this long, while the buildings rise. */
+export const PUSH_ZOOM = 0.5;
+export const PUSH_MS = 2200;
+export const PUSH_PITCH = 5;
+
+function smoothstep(x: number): number {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+}
 
 const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
   sales: [
@@ -165,6 +175,7 @@ export function App() {
   // The look-around view (Google 3D) opens on the story's current camera and hands its own back on exit.
   const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
   const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
+  const push = useRef<{ at: number } | null>(null);
 
   useEffect(() => {
     fetch(`${DATA_BASE}/index.json`)
@@ -220,6 +231,13 @@ export function App() {
         pitch: lerp(a.pitch, b.pitch, t),
         bearing: lerpAngle(a.bearing, b.bearing, t) + drift,
       };
+      // On the way into look-around the camera pushes in and down while the buildings rise.
+      const pushing = push.current;
+      if (pushing) {
+        const u = smoothstep((now - pushing.at) / PUSH_MS);
+        camera.zoom += PUSH_ZOOM * u;
+        camera.pitch = Math.min(80, camera.pitch + PUSH_PITCH * u);
+      }
       // After look-around, glide from wherever Google left us back to the story.
       const back = resume.current;
       if (back) {
@@ -264,6 +282,8 @@ export function App() {
   };
   const enterExplore = () => {
     if (!map || !exploreAvailable || explore !== "off" || !mapAlive(map)) return;
+    push.current = { at: performance.now() };
+    raiseBuildings(map, map.getZoom(), PUSH_ZOOM);
     setExplore("on");
   };
   const enterExploreRef = useRef(enterExplore);
@@ -271,6 +291,8 @@ export function App() {
   const exitExplore = (camera: ViewCamera) => {
     if (explore !== "on") return;
     resume.current = { from: { ...camera, pitch: Math.min(80, Math.max(0, camera.pitch)) }, at: performance.now() };
+    push.current = null;
+    if (map) lowerBuildings(map);
     setExplore("closing");
     window.setTimeout(() => setExplore("off"), 500);
   };
@@ -460,7 +482,7 @@ export function App() {
               <span className="look-around-icon" aria-hidden="true">⤢</span>look around
             </button>
           )}
-          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} onExit={exitExplore} />}
+          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={PUSH_MS} onExit={exitExplore} />}
         </>
       )}
     </>

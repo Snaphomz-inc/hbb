@@ -89,7 +89,7 @@ type Map3D = HTMLElement & GoogleCamera;
  * `getCamera` is read twice: when Google is created, and again the moment its mesh is ready, so the
  * story view can keep drifting underneath while tiles load and the crossfade still lines up.
  */
-export function Explore({ getCamera, closing, onExit }: { getCamera: () => ViewCamera; closing: boolean; onExit: (camera: ViewCamera) => void }) {
+export function Explore({ getCamera, closing, minWait = 0, onExit }: { getCamera: () => ViewCamera; closing: boolean; minWait?: number; onExit: (camera: ViewCamera) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map3D | null>(null);
   const opened = useRef<ViewCamera>(getCamera());
@@ -97,6 +97,7 @@ export function Explore({ getCamera, closing, onExit }: { getCamera: () => ViewC
 
   useEffect(() => {
     let alive = true;
+    const mountedAt = performance.now();
     const height = window.innerHeight;
     loadMaps3d()
       .then((lib) => {
@@ -110,13 +111,18 @@ export function Explore({ getCamera, closing, onExit }: { getCamera: () => ViewC
         const show = () => {
           if (shown || !alive) return;
           shown = true;
-          // Catch up with the story's drift, give the mesh a beat to settle on it, then crossfade.
-          const now = toGoogle(getCamera(), height);
-          map3d.center = now.center;
-          map3d.range = now.range;
-          map3d.tilt = now.tilt;
-          map3d.heading = now.heading;
-          setTimeout(() => alive && setState("ready"), 350);
+          // Let the story's own move (push-in, rising buildings) finish, catch up with where the camera
+          // ended, give the mesh a beat to settle on it, then crossfade.
+          const wait = Math.max(0, mountedAt + minWait - performance.now());
+          setTimeout(() => {
+            if (!alive) return;
+            const now = toGoogle(getCamera(), height);
+            map3d.center = now.center;
+            map3d.range = now.range;
+            map3d.tilt = now.tilt;
+            map3d.heading = now.heading;
+            setTimeout(() => alive && setState("ready"), 350);
+          }, wait);
         };
         map3d.addEventListener("gmp-steadychange", (event) => {
           if ((event as Event & { isSteady?: boolean }).isSteady) show();

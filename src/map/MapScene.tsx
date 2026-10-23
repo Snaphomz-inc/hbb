@@ -76,6 +76,32 @@ export function setSalesClock(map: maplibregl.Map, clock: number | null): void {
   }
 }
 
+const BUILDING_HEIGHT = ["coalesce", ["get", "render_height"], 6];
+
+/**
+ * Make the buildings grow with the camera. Heights cannot be animated per frame without re-tiling,
+ * but a zoom-keyed height is interpolated in the shader, so the height is written once as a line
+ * through zero at `zoom0` and full height at `zoom0 + push`, and the camera's push-in does the rest.
+ * Negative values below zoom0 clamp to zero in the shader. Knots sit on integer zooms because that
+ * is where the interpolation happens; three of them keep the line straight across a tile reload.
+ */
+export function raiseBuildings(map: maplibregl.Map, zoom0: number, push: number): void {
+  if (!mapAlive(map) || !map.getLayer("buildings")) return;
+  const tz = Math.floor(zoom0);
+  const at = (zoom: number) => ["*", BUILDING_HEIGHT, (zoom - zoom0) / push];
+  map.setPaintProperty("buildings", "fill-extrusion-height", ["interpolate", ["linear"], ["zoom"], tz, at(tz), tz + 1, at(tz + 1), tz + 2, at(tz + 2)]);
+  // The re-tiled buckets take a moment to arrive; fade in after they have, so the old full-height ones never flash.
+  window.setTimeout(() => {
+    if (mapAlive(map) && map.getLayer("buildings")) map.setPaintProperty("buildings", "fill-extrusion-opacity", 0.85);
+  }, 350);
+}
+
+export function lowerBuildings(map: maplibregl.Map): void {
+  if (!mapAlive(map) || !map.getLayer("buildings")) return;
+  map.setPaintProperty("buildings", "fill-extrusion-opacity", 0);
+  map.setPaintProperty("buildings", "fill-extrusion-height", BUILDING_HEIGHT);
+}
+
 /** Draw the commute routes from their start to `progress` (0 to 1) of their length. */
 export function setRouteProgress(map: maplibregl.Map, progress: number): void {
   if (!mapAlive(map) || !map.getLayer("routes")) return;
