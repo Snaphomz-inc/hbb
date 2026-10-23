@@ -271,12 +271,12 @@ def area_filter(cities: list[str], zips: list[str], by_zip: bool) -> tuple[str, 
 def load_sales(con: sqlite3.Connection, cities: list[str], zips: list[str], by_zip: bool = False) -> list[dict]:
     clause, params = area_filter(cities, zips, by_zip)
     rows = con.execute(
-        f"""SELECT lat, lon, sold_price, list_price, living_sqft, beds, subtype, sold_date, dom, year_built, zip
+        f"""SELECT lat, lon, sold_price, list_price, living_sqft, beds, subtype, sold_date, dom, year_built, zip, listing_id
             FROM sales WHERE {clause} AND property_type != 'Residential Income'
               AND sold_price > 50000 AND lat IS NOT NULL AND lon IS NOT NULL""",
         params,
     ).fetchall()
-    sales = [dict(zip(["lat", "lon", "price", "list", "sqft", "beds", "subtype", "date", "dom", "built", "zip"], row)) for row in rows]
+    sales = [dict(zip(["lat", "lon", "price", "list", "sqft", "beds", "subtype", "date", "dom", "built", "zip", "listing"], row)) for row in rows]
     if not sales:
         return []
     # Trim mis-geocoded outliers: keep the 3rd to 97th percentile box, padded.
@@ -340,7 +340,8 @@ def compact_sales(sales: list[dict], today: date) -> list[list]:
     out = []
     for s in sales:
         months_ago = max(0, (today - date.fromisoformat(s["date"])).days // 30)
-        out.append([round(s["lon"], 5), round(s["lat"], 5), int(s["price"]), int(s["sqft"] or 0), kind_of(s["subtype"]), s["beds"] or 0, months_ago])
+        out.append([round(s["lon"], 5), round(s["lat"], 5), int(s["price"]), int(s["sqft"] or 0), kind_of(s["subtype"]), s["beds"] or 0, months_ago,
+                    str(s["listing"] or "")])
     return out
 
 

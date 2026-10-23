@@ -4,3 +4,4 @@ scripts/cache
 .env
 .env.local
 exports
+__pycache__

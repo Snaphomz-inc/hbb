@@ -1021,6 +1021,42 @@ select {
 }
 
 /* Look around: the quiet way into Google's 3D mesh, and the view itself. */
+/* Hover card over a sale dot; the dot itself is the link. */
+.sale-tip {
+  position: fixed;
+  z-index: 15;
+  transform: translate(-50%, calc(-100% - 14px));
+  padding: 8px 11px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #fff;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.sale-tip-price {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.sale-tip-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 2px;
+}
+
+.sale-tip-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lime);
+  margin-top: 6px;
+}
+
 .look-around {
   position: fixed;
   right: 46px;

@@ -11,6 +11,7 @@ import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
 import { city } from "./city";
+import { homesUrl, listingUrl } from "./links";
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
@@ -182,6 +183,8 @@ export function App() {
   const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
   const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
   const dive = useRef<{ at: number } | null>(null);
+  // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
+  const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number } | null>(null);
 
   useEffect(() => {
     fetch(`${DATA_BASE}/index.json`)
@@ -302,20 +305,58 @@ export function App() {
     window.setTimeout(() => setExplore("off"), 500);
   };
 
-  // A click on the map itself is the quiet way in. Google's script is fetched early so the way in is short.
+  const chapter: Chapter | undefined = chapters[position.active];
+  const chapterRef = useRef(chapter);
+  chapterRef.current = chapter;
+
+  // A click on a sale dot opens that listing on the main site; a click on the map itself is the quiet
+  // way into look-around. Google's script is fetched early so the way in is short.
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
-    const canvas = map.getCanvas();
-    const onClick = () => enterExploreRef.current();
-    canvas.addEventListener("click", onClick);
+    const saleAt = (point: maplibregl.Point) => {
+      // Dots exist in every chapter but are only drawn in the ones that list the layer, and only once the timeline has reached them.
+      if (!chapterRef.current?.layers.includes("sales") || !map.getLayer("sales")) return null;
+      const pad = 7;
+      const hits = map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["sales"] });
+      return hits.find((f) => map.getFeatureState({ source: "sales", id: f.id as number }).on) ?? null;
+    };
+    const onClick = (event: maplibregl.MapMouseEvent) => {
+      const hit = saleAt(event.point);
+      const listing = hit?.properties?.listing as string | undefined;
+      if (listing) {
+        window.open(listingUrl(listing), "_blank", "noopener");
+        return;
+      }
+      enterExploreRef.current();
+    };
+    const onMove = (event: maplibregl.MapMouseEvent) => {
+      const hit = saleAt(event.point);
+      map.getCanvas().style.cursor = hit ? "pointer" : "";
+      if (!hit) {
+        setSaleTip((tip) => (tip ? null : tip));
+        return;
+      }
+      const rect = map.getCanvas().getBoundingClientRect();
+      const p = hit.properties as { price: number; beds: number; sqft: number; kind: number };
+      setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind });
+    };
+    const onLeave = () => {
+      map.getCanvas().style.cursor = "";
+      setSaleTip(null);
+    };
+    map.on("click", onClick);
+    map.on("mousemove", onMove);
+    map.on("mouseout", onLeave);
     const warm = window.setTimeout(preloadMaps3d, 2500);
     return () => {
-      canvas.removeEventListener("click", onClick);
+      if (mapAlive(map)) {
+        map.off("click", onClick);
+        map.off("mousemove", onMove);
+        map.off("mouseout", onLeave);
+      }
       window.clearTimeout(warm);
     };
   }, [map]);
-
-  const chapter: Chapter | undefined = chapters[position.active];
   const settled = position.progress > 0.06 || position.active === 0;
   const playback = chapter?.kind === "story" && settled ? chapter.playback : undefined;
   const chapterId = chapter?.id;
@@ -461,8 +502,8 @@ export function App() {
             <Headline text={chapter.headline} accent={chapter.accent} className="closing-headline" />
             <p>{chapter.body}</p>
             <div className="cta-row">
-              <a className="cta" href={`https://www.snaphomz.com/buy?search=${encodeURIComponent(data.name)}`} target="_blank" rel="noreferrer">
-                Browse homes in {data.name} <span aria-hidden="true">→</span>
+              <a className="cta" href={homesUrl(data.slug)} target="_blank" rel="noreferrer">
+                Homes for sale in {data.name} <span aria-hidden="true">→</span>
               </a>
               <button className="cta cta-ghost" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
                 Fly over it again
@@ -482,6 +523,17 @@ export function App() {
             <div className="progress-bar" style={{ transform: `scaleX(${position.overall})` }} />
           </div>
 
+          {saleTip && (
+            <div className="sale-tip" style={{ left: saleTip.x, top: saleTip.y }} role="tooltip">
+              <div className="sale-tip-price">{money(saleTip.price)}</div>
+              <div className="sale-tip-meta">
+                {saleTip.beds > 0 ? `${saleTip.beds} bd · ` : ""}
+                {saleTip.sqft > 0 ? `${saleTip.sqft.toLocaleString()} sqft · ` : ""}
+                {saleTip.kind === 0 ? "house" : saleTip.kind === 1 ? "condo" : "home"}
+              </div>
+              <div className="sale-tip-hint">Open the listing on Snaphomz ↗</div>
+            </div>
+          )}
           {exploreAvailable && (
             <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
               <span className="look-around-icon" aria-hidden="true">⤢</span>look around

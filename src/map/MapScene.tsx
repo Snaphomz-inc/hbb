@@ -178,10 +178,10 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
   const dotRadius = ["interpolate", ["linear"], ["zoom"], 12, ["case", shown, 2.2, 0], 14, ["case", shown, 3.6, 0], 16, ["case", shown, 7, 0]];
   const salesSource: GeoJsonFeatureCollection = {
     type: "FeatureCollection",
-    features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo], i) => ({
+    features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo, listing], i) => ({
       type: "Feature",
       id: i,
-      properties: { price, sqft, kind, beds, monthsAgo },
+      properties: { price, sqft, kind, beds, monthsAgo, listing: listing ?? "" },
       geometry: { type: "Point", coordinates: [lon, lat] },
     })),
   };
