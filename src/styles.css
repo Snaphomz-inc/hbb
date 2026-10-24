@@ -12,9 +12,19 @@
   --panel: rgba(17, 24, 39, 0.72);
   --panel-strong: rgba(17, 24, 39, 0.86);
   --line: rgba(255, 255, 255, 0.14);
+  /* Brand type (from the design team): Arimo for headings, Instrument Sans for everything else. */
   --font: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Arimo", "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   color-scheme: dark;
+}
+
+h1,
+h2,
+h3,
+.stat-value,
+.region-name {
+  font-family: var(--display);
 }
 
 * {
