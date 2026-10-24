@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useState } from "react";
+import { screenPoint } from "../map/MapScene";
 import type { Label } from "../story/chapters";
 
 type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean; flip: boolean };
@@ -50,7 +51,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
       const taken: Rect[] = [];
       const next: Placed[] = [];
       for (const label of labels) {
-        const point = map.project([label.lon, label.lat]);
+        const point = screenPoint(map, [label.lon, label.lat]);
         const inView = Number.isFinite(point.x) && Number.isFinite(point.y) && point.x > 30 && point.x < width - 30 && point.y > 110 && point.y < height - 70;
         let lift = 0;
         let flip = false;

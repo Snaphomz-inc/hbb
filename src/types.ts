@@ -70,8 +70,8 @@ export type Neighborhood = {
       byBeds: Record<string, { count: number; medianRent: number }>;
     } | null;
   };
-  /** [lon, lat, price, sqft, kind (0 house, 1 condo, 2 other), beds, monthsAgo, listingId ("" when unknown)] */
-  sales: Array<[number, number, number, number, number, number, number, string]>;
+  /** [lon, lat, price, sqft, kind (0 house, 1 condo, 2 other), beds, monthsAgo, listingId ("" when unknown), street address] */
+  sales: Array<[number, number, number, number, number, number, number, string, string]>;
   schools: School[];
   zones: FeatureCollection | null;
   permits: {

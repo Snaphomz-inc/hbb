@@ -1036,9 +1036,44 @@ select {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
+/* A teaser card is the same card, shown unprompted on a dot that has just landed; it is a real link. */
+.sale-tip.is-teaser {
+  pointer-events: auto;
+  cursor: pointer;
+  text-decoration: none;
+  opacity: 0;
+  transform: translate(-50%, calc(-100% - 8px)) scale(0.96);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.sale-tip.is-teaser.show {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 16px)) scale(1);
+}
+
+.sale-tip.is-teaser::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  height: 12px;
+  background: var(--line);
+}
+
+.sale-tip.is-teaser:hover {
+  border-color: var(--lime);
+}
+
 .sale-tip-price {
   font-weight: 600;
   font-size: 14px;
+}
+
+.sale-tip-address {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 2px;
 }
 
 .sale-tip-meta {

@@ -6,7 +6,8 @@ import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
 import { useScramble } from "./lib/scramble";
-import { MapScene, mapAlive, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
+import { MapScene, PULSE, mapAlive, saleTime, screenPoint, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
+import { SaleTeasers, saleKindName, type Teaser, type TeaserSpots } from "./components/SaleTeasers";
 import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
@@ -184,9 +185,16 @@ export function App() {
   const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
   const dive = useRef<{ at: number } | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
-  const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number } | null>(null);
+  const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number; address: string } | null>(null);
   // While the pointer rests on a dot the camera drift pauses, so the dot stays under the cursor.
   const holdDrift = useRef(false);
+  // A couple of dots show their card unprompted once they land, so the link is discoverable; the
+  // first hover on any other dot clears them for the rest of the chapter.
+  const [teasers, setTeasers] = useState<Teaser[]>([]);
+  const teasersRef = useRef<Teaser[]>(teasers);
+  teasersRef.current = teasers;
+  const teaserSpots = useRef<TeaserSpots>([]);
+  const teasersCleared = useRef(false);
 
   useEffect(() => {
     fetch(`${DATA_BASE}/index.json`)
@@ -316,22 +324,85 @@ export function App() {
   const chapterRef = useRef(chapter);
   chapterRef.current = chapter;
 
+  // Sales that could carry a card: with a listing and an address, a house or condo, priced near the
+  // median so they read as typical. Which two actually do is decided on screen when the chapter opens.
+  const teaserCandidates = useMemo(() => {
+    if (!data) return [];
+    const median = data.market.all.medianPrice;
+    return data.sales
+      .map((s, id) => ({ id, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "", t: saleTime(id, s[6]) }))
+      .filter((s) => s.listing && s.address && s.kind <= 1 && s.sqft > 0)
+      .sort((a, b) => Math.abs(a.price - median) - Math.abs(b.price - median));
+  }, [data]);
+
+  // Two candidates well inside the view (clear of the headline, the stat column and the fact labels),
+  // far apart on screen, one landing early in the year and one later on.
+  const pickTeasers = (target: maplibregl.Map): Teaser[] => {
+    const width = target.getContainer().clientWidth;
+    const height = target.getContainer().clientHeight;
+    const wide = width > 900;
+    // A phone shows a sliver of map between the headline and the stat row, so it gets one card, placed more tightly.
+    const box = wide
+      ? { x0: width * 0.3, x1: width * 0.74, y0: height * 0.3, y1: height * 0.84 }
+      : { x0: width * 0.25, x1: width * 0.75, y0: height * 0.3, y1: height * 0.52 };
+    const windows: ReadonlyArray<readonly [number, number]> = wide ? [[1.5, 4.5], [6, 10]] : [[1.5, 10]];
+    const labelGap = wide ? 150 : 90;
+    const labels = (chapterRef.current?.labels ?? []).map((l) => screenPoint(target, [l.lon, l.lat]));
+    // The ground a fact label's card can cover: up its stem from the dot and off to the right (or the left, flipped).
+    const labelRects = labels.map((l) => ({ x0: l.x - 220, y0: l.y - 150, x1: l.x + 220, y1: l.y + 12 }));
+    const cardRect = (at: { x: number; y: number }) => ({ x0: at.x - 95, y0: at.y - 100, x1: at.x + 95, y1: at.y + 6 });
+    const overlaps = (a: { x0: number; y0: number; x1: number; y1: number }, b: { x0: number; y0: number; x1: number; y1: number }) =>
+      a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+    const placed: Array<{ x: number; y: number }> = [];
+    const picks: Teaser[] = [];
+    for (const window of windows) {
+      for (const s of teaserCandidates) {
+        if (s.t < window[0] || s.t > window[1] || picks.some((p) => p.id === s.id)) continue;
+        const at = screenPoint(target, [s.lon, s.lat]);
+        if (!(at.x > box.x0 && at.x < box.x1 && at.y > box.y0 && at.y < box.y1)) continue;
+        if (labels.some((l) => Math.hypot(l.x - at.x, l.y - at.y) < labelGap)) continue;
+        if (labelRects.some((r) => overlaps(cardRect(at), r))) continue;
+        if (placed.some((q) => Math.hypot(q.x - at.x, q.y - at.y) < width * 0.22)) continue;
+        picks.push(s);
+        placed.push(at);
+        break;
+      }
+    }
+    return picks;
+  };
+
   // A click on a sale dot opens that listing on the main site; a click on the map itself is the quiet
   // way into look-around. Google's script is fetched early so the way in is short.
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
-    const saleAt = (point: maplibregl.Point) => {
+    type SaleHit = { id: number; teaser: boolean; price: number; beds: number; sqft: number; kind: number; listing: string; address: string };
+    const saleAt = (point: maplibregl.Point): SaleHit | null => {
       // Dots exist in every chapter but are only drawn in the ones that list the layer, and only once the timeline has reached them.
       if (!chapterRef.current?.layers.includes("sales") || !map.getLayer("sales")) return null;
+      const gap = (lngLat: [number, number]) => {
+        const at = screenPoint(map, lngLat);
+        return Math.hypot(at.x - point.x, at.y - point.y);
+      };
+      // A dot carrying a card is matched where its card is drawn, so it is never lost among its neighbours.
+      const rect = map.getCanvas().getBoundingClientRect();
+      const spot = teaserSpots.current.find((s) => Math.hypot(s.x - rect.left - point.x, s.y - rect.top - point.y) <= 12);
+      const teaser = spot && teasersRef.current.find((t) => t.id === spot.id);
+      if (teaser) return { ...teaser, teaser: true };
       const pad = 9;
-      const hits = map.queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["sales"] });
-      return hits.find((f) => map.getFeatureState({ source: "sales", id: f.id as number }).on) ?? null;
+      const hits = map
+        .queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["sales"] })
+        .filter((f) => map.getFeatureState({ source: "sales", id: f.id as number }).on);
+      if (hits.length === 0) return null;
+      // Where dots crowd, the one nearest the pointer wins.
+      const at = (f: maplibregl.MapGeoJSONFeature) => gap((f.geometry as GeoJSON.Point).coordinates as [number, number]);
+      const best = hits.reduce((a, f) => (at(f) < at(a) ? f : a));
+      const p = best.properties as { price: number; beds: number; sqft: number; kind: number; listing?: string; address?: string };
+      return { id: best.id as number, teaser: false, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind, listing: p.listing ?? "", address: p.address ?? "" };
     };
     const onClick = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
-      const listing = hit?.properties?.listing as string | undefined;
-      if (listing) {
-        window.open(listingUrl(listing), "_blank", "noopener");
+      if (hit?.listing) {
+        window.open(listingUrl(hit.listing), "_blank", "noopener");
         return;
       }
       enterExploreRef.current();
@@ -344,9 +415,17 @@ export function App() {
         setSaleTip((tip) => (tip ? null : tip));
         return;
       }
+      // A teaser dot already shows its card; any other dot takes the teasers down for good.
+      if (hit.teaser) {
+        setSaleTip((tip) => (tip ? null : tip));
+        return;
+      }
+      if (teasersRef.current.length > 0) {
+        teasersCleared.current = true;
+        setTeasers([]);
+      }
       const rect = map.getCanvas().getBoundingClientRect();
-      const p = hit.properties as { price: number; beds: number; sqft: number; kind: number };
-      setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind });
+      setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address });
     };
     const onLeave = () => {
       holdDrift.current = false;
@@ -374,12 +453,19 @@ export function App() {
   // Chapter animations: the year of sales lands month by month; commute routes draw themselves.
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
+    // The pointer has not moved, but the map under it has.
+    setSaleTip(null);
     if (!playback) {
       setSalesClock(map, null);
       setRouteProgress(map, 1);
       setTick(-1);
+      setTeasers([]);
+      teasersCleared.current = false;
       return;
     }
+    const shown = new Set<number>();
+    // Picked once the first card is due, when the camera has settled on the chapter.
+    let picks: Teaser[] | null = null;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const duration = playback === "sales" ? 7000 : 2800;
     const span = 12 + 1.5; // months, plus a tail for the last pulses to fade
@@ -392,6 +478,15 @@ export function App() {
         const clock = u * span;
         setSalesClock(map, clock);
         setTick(Math.min(11, Math.floor(clock)));
+        // A teaser's card appears once its pulse ring has settled.
+        if (clock >= 1.5 + PULSE + 0.4 && !teasersCleared.current) {
+          picks ??= pickTeasers(map);
+          for (const pick of picks) {
+            if (shown.has(pick.id) || clock < saleTime(pick.id, data?.sales[pick.id]?.[6] ?? 0) + PULSE + 0.4) continue;
+            shown.add(pick.id);
+            setTeasers((current) => (current.some((t) => t.id === pick.id) ? current : [...current, pick]));
+          }
+        }
       } else {
         setRouteProgress(map, 1 - Math.pow(1 - u, 2));
       }
@@ -535,14 +630,16 @@ export function App() {
           {saleTip && (
             <div className="sale-tip" style={{ left: saleTip.x, top: saleTip.y }} role="tooltip">
               <div className="sale-tip-price">{money(saleTip.price)}</div>
+              {saleTip.address && <div className="sale-tip-address">{saleTip.address}</div>}
               <div className="sale-tip-meta">
                 {saleTip.beds > 0 ? `${saleTip.beds} bd · ` : ""}
                 {saleTip.sqft > 0 ? `${saleTip.sqft.toLocaleString()} sqft · ` : ""}
-                {saleTip.kind === 0 ? "house" : saleTip.kind === 1 ? "condo" : "home"}
+                {saleKindName(saleTip.kind)}
               </div>
               <div className="sale-tip-hint">Open the listing on Snaphomz ↗</div>
             </div>
           )}
+          {map && mapAlive(map) && teasers.length > 0 && explore === "off" && <SaleTeasers map={map} teasers={teasers} spots={teaserSpots} />}
           {exploreAvailable && (
             <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
               <span className="look-around-icon" aria-hidden="true">⤢</span>look around

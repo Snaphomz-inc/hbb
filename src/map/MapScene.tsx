@@ -41,11 +41,35 @@ export const LAYER_GROUPS: Record<string, string[]> = {
 };
 
 /** How long a sale's pulse ring lasts, in months of story time. */
-const PULSE = 1.4;
+export const PULSE = 1.4;
 
 /** When each sale appears on the timeline: its 30-day bucket plus a stable jitter so a month trickles in. */
 export function saleTime(i: number, monthsAgo: number): number {
   return 11 - monthsAgo + (((i * 2654435761) >>> 0) % 1000) / 1000;
+}
+
+type FakeTerrain = NonNullable<Parameters<maplibregl.Map["transform"]["locationToScreenPoint"]>[1]>;
+const elevations = new WeakMap<maplibregl.Map, Map<string, number>>();
+
+/**
+ * Screen position of a map coordinate on the terrain. `map.project` reads the elevation from whichever
+ * DEM tiles are loaded at that instant, and that drops to sea level for a few frames whenever the
+ * drifting camera crosses a tile edge, which throws anything pinned to the ground 50 to 100 px off.
+ * So each point's last good elevation is remembered and used in its place.
+ */
+export function screenPoint(map: maplibregl.Map, lngLat: [number, number]): maplibregl.Point {
+  if (!map.getTerrain()) return map.project(lngLat);
+  let cache = elevations.get(map);
+  if (!cache) {
+    cache = new Map();
+    elevations.set(map, cache);
+  }
+  const key = `${lngLat[0]},${lngLat[1]}`;
+  const read = map.queryTerrainElevation(lngLat) ?? 0;
+  if (read !== 0) cache.set(key, read);
+  const elevation = read !== 0 ? read : (cache.get(key) ?? 0);
+  const fixed = { getElevationForLngLat: () => elevation, getElevationForLngLatZoom: () => elevation } as unknown as FakeTerrain;
+  return map.transform.locationToScreenPoint(maplibregl.LngLat.convert(lngLat), fixed);
 }
 
 type SalesClock = { t: Float64Array; on: Uint8Array; pulsing: Set<number> };
@@ -178,10 +202,10 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
   const dotRadius = ["interpolate", ["linear"], ["zoom"], 12, ["case", shown, 2.2, 0], 14, ["case", shown, 3.6, 0], 16, ["case", shown, 7, 0]];
   const salesSource: GeoJsonFeatureCollection = {
     type: "FeatureCollection",
-    features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo, listing], i) => ({
+    features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo, listing, address], i) => ({
       type: "Feature",
       id: i,
-      properties: { price, sqft, kind, beds, monthsAgo, listing: listing ?? "" },
+      properties: { price, sqft, kind, beds, monthsAgo, listing: listing ?? "", address: address ?? "" },
       geometry: { type: "Point", coordinates: [lon, lat] },
     })),
   };

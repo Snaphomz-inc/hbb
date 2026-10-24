@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import sqlite3
 import statistics
 import sys
@@ -268,15 +269,23 @@ def area_filter(cities: list[str], zips: list[str], by_zip: bool) -> tuple[str, 
     return clause, params
 
 
+def short_address(address: str | None) -> str:
+    """The street line only ("1755 Ocean Avenue 603" -> "1755 Ocean Avenue #603"); the city and ZIP are implied."""
+    parts = (address or "").split()
+    if len(parts) >= 4 and re.fullmatch(r"\d+[A-Za-z]?|[A-Za-z]", parts[-1]):
+        parts[-1] = "#" + parts[-1]
+    return " ".join(parts)
+
+
 def load_sales(con: sqlite3.Connection, cities: list[str], zips: list[str], by_zip: bool = False) -> list[dict]:
     clause, params = area_filter(cities, zips, by_zip)
     rows = con.execute(
-        f"""SELECT lat, lon, sold_price, list_price, living_sqft, beds, subtype, sold_date, dom, year_built, zip, listing_id
+        f"""SELECT lat, lon, sold_price, list_price, living_sqft, beds, subtype, sold_date, dom, year_built, zip, listing_id, address
             FROM sales WHERE {clause} AND property_type != 'Residential Income'
               AND sold_price > 50000 AND lat IS NOT NULL AND lon IS NOT NULL""",
         params,
     ).fetchall()
-    sales = [dict(zip(["lat", "lon", "price", "list", "sqft", "beds", "subtype", "date", "dom", "built", "zip", "listing"], row)) for row in rows]
+    sales = [dict(zip(["lat", "lon", "price", "list", "sqft", "beds", "subtype", "date", "dom", "built", "zip", "listing", "address"], row)) for row in rows]
     if not sales:
         return []
     # Trim mis-geocoded outliers: keep the 3rd to 97th percentile box, padded.
@@ -341,7 +350,7 @@ def compact_sales(sales: list[dict], today: date) -> list[list]:
     for s in sales:
         months_ago = max(0, (today - date.fromisoformat(s["date"])).days // 30)
         out.append([round(s["lon"], 5), round(s["lat"], 5), int(s["price"]), int(s["sqft"] or 0), kind_of(s["subtype"]), s["beds"] or 0, months_ago,
-                    str(s["listing"] or "")])
+                    str(s["listing"] or ""), short_address(s["address"])])
     return out
 
 
