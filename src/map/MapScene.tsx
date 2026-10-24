@@ -373,7 +373,7 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
       interactive: false,
       attributionControl: { compact: true },
       fadeDuration: 300,
-      canvasContextAttributes: { antialias: true },
+      // No MSAA: on a terrain map it costs a good share of every frame, and over satellite imagery it shows nowhere.
     });
     let alive = true;
     map.on("load", () => {

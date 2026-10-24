@@ -26,6 +26,9 @@ export const DIVE_ZOOM = 1.0;
 export const DIVE_PITCH = 60;
 export const DIVE_BEARING = 14;
 
+/** How long the page is left alone before the camera drift eases to rest. */
+const IDLE_MS = 8000;
+
 function smoothstep(x: number): number {
   const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
@@ -227,13 +230,22 @@ export function App() {
     };
   }, [slug]);
 
-  // Drive the camera from the scroll position, every frame, with a slow drift so the view never sits still.
+  // Drive the camera from the scroll position, every frame, with a slow drift so the view never sits still
+  // while someone is looking. Once the page has been left alone for a while the drift eases to rest, and a
+  // resting camera means the map draws nothing at all; the first scroll or pointer movement wakes it.
   useEffect(() => {
     if (!map || !data || chapters.length === 0) return;
     let frame = 0;
-    // The drift runs on its own clock, which stops while the pointer rests on a sale dot.
+    // The drift runs on its own clock, which stops while the pointer rests on a sale dot and slows to a halt when idle.
     let driftNow = 0;
     let lastNow = 0;
+    let lastActivity = performance.now();
+    let pace = 1; // 1 drifting, 0 at rest
+    const wake = () => {
+      lastActivity = performance.now();
+    };
+    const wakeEvents = ["scroll", "wheel", "pointermove", "pointerdown", "touchstart", "keydown"] as const;
+    for (const event of wakeEvents) window.addEventListener(event, wake, { passive: true });
     const widthDegrees = data.bounds[1][0] - data.bounds[0][0];
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tick = (now: number) => {
@@ -245,8 +257,12 @@ export function App() {
       const a = chapters[from].camera;
       const b = chapters[to].camera;
       const fit = zoomToFit(widthDegrees, map.getContainer().clientWidth, 0.8);
-      if (!holdDrift.current && lastNow) driftNow += now - lastNow;
+      const dt = lastNow ? now - lastNow : 0;
       lastNow = now;
+      // Eases out over 1.5 s once idle, and back up within a third of a second of any activity.
+      const idle = now - lastActivity > IDLE_MS;
+      pace = Math.min(1, Math.max(0, pace + (idle ? -dt / 1500 : dt / 350)));
+      if (!holdDrift.current) driftNow += dt * pace;
       const drift = still ? 0 : Math.sin(driftNow / 9000) * 2.2;
       const breathe = still ? 0 : Math.sin(driftNow / 13000) * 0.04;
       const camera = {
@@ -282,7 +298,10 @@ export function App() {
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      for (const event of wakeEvents) window.removeEventListener(event, wake);
+    };
   }, [map, data, chapters, positionRef]);
 
   useEffect(() => {

@@ -51,12 +51,14 @@ export function baseStyle(): StyleSpecification {
         type: "fill-extrusion",
         source: "openmaptiles",
         "source-layer": "building",
-        minzoom: 13,
+        // Buildings are only drawn once the camera is close enough to read them (the dive into look-around,
+        // and the smaller neighborhoods); at the chapter zoom they cost a third of each frame and show as grain.
+        minzoom: 13.9,
         paint: {
           "fill-extrusion-color": "#e9e4d8",
           "fill-extrusion-height": ["coalesce", ["get", "render_height"], 6],
           "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-          "fill-extrusion-opacity": 0.62,
+          "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 13.9, 0, 14.4, 0.62],
           "fill-extrusion-vertical-gradient": true,
         },
       },
