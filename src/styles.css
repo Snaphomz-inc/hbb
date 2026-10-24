@@ -74,6 +74,13 @@ select {
   pointer-events: none;
 }
 
+/* Chapter lengths in viewport heights. On phones the toolbar comes and goes, so the dynamic unit keeps
+   the spacers in step with the innerHeight the scroll story measures against. */
+.spacers section {
+  height: calc(var(--h) * 1vh);
+  height: calc(var(--h) * 1dvh);
+}
+
 /* ---------------------------------------------------------------- chrome */
 
 .top {
@@ -674,12 +681,12 @@ select {
   border-radius: 6px;
   padding: 7px 11px;
   backdrop-filter: blur(10px);
-  transform: translateY(6px);
+  transform: translate(var(--shift, 0px), 6px);
   transition: transform 300ms ease 180ms;
 }
 
 .label.in .label-card {
-  transform: translateY(0);
+  transform: translate(var(--shift, 0px), 0);
 }
 
 .label-flip .label-card {
@@ -946,6 +953,40 @@ select {
     left: 16px;
     right: 16px;
     bottom: 112px;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .stats::-webkit-scrollbar {
+    display: none;
+  }
+  .stat {
+    scroll-snap-align: start;
+  }
+  /* Nearby neighborhoods become one swipeable row instead of a stack that pushes the headline up. */
+  .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin: 0 -16px 20px;
+    padding: 0 16px;
+    scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar {
+    display: none;
+  }
+  .chip {
+    flex: 0 0 auto;
+  }
+  .chips-title {
+    flex: 0 0 auto;
+  }
+  /* The bottom edge: scroll hint on the left, look-around pill on the right, attribution button in the corner. */
+  .scroll-hint {
+    left: 16px;
+    bottom: 12px;
+    transform: translate(0, 8px);
+  }
+  .scroll-hint.show {
+    transform: none;
   }
   .stat {
     min-width: 200px;
@@ -1305,8 +1346,8 @@ html.exploring .look-around {
 
 @media (max-width: 900px) {
   .look-around {
-    right: 40px;
-    bottom: 10px;
+    right: 46px;
+    bottom: 12px;
     padding: 6px 10px;
   }
   .explore-hint {

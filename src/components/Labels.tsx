@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { screenPoint } from "../map/MapScene";
 import type { Label } from "../story/chapters";
 
-type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean; flip: boolean };
+type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean; flip: boolean; shift: number };
 
 const CARD_HEIGHT = 46;
 const STEM = 34;
@@ -50,17 +50,23 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
           ];
       const taken: Rect[] = [];
       const next: Placed[] = [];
-      for (const label of labels) {
+      // A phone's map is a sliver, so only the first few labels (they are listed by importance) get a card.
+      const shown = wide ? labels : labels.slice(0, 3);
+      for (const label of shown) {
         const point = screenPoint(map, [label.lon, label.lat]);
         const inView = Number.isFinite(point.x) && Number.isFinite(point.y) && point.x > 30 && point.x < width - 30 && point.y > 110 && point.y < height - 70;
         let lift = 0;
         let flip = false;
+        let shift = 0;
         let rect: Rect | null = null;
         if (inView) {
           const w = Math.min(cardWidth(label), wide ? Infinity : 200);
-          // A card that would run off the right edge hangs to the left of its stem instead.
+          // A card that would run off the right edge hangs to the left of its stem instead, and one that
+          // would still run off an edge slides along the stem's top until it fits.
           flip = point.x + 6 + w > width - 12;
-          const x0 = flip ? point.x - 6 - w : point.x + 6;
+          const natural = flip ? point.x - 6 - w : point.x + 6;
+          const x0 = Math.min(Math.max(natural, 12), Math.max(12, width - 12 - w));
+          shift = x0 - natural;
           for (let attempt = 0; attempt < 4; attempt += 1) {
             lift = attempt * LIFT_STEP;
             const bottom = point.y - STEM - lift;
@@ -71,7 +77,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
         const underText = rect ? blocked.some((zone) => overlaps(rect!, zone)) : false;
         const onScreen = inView && !underText && rect !== null && rect.y0 > 60;
         if (onScreen && rect) taken.push(rect);
-        next.push({ ...label, x: point.x, y: point.y, lift, onScreen, flip });
+        next.push({ ...label, x: point.x, y: point.y, lift, onScreen, flip, shift });
       }
       setPlaced(next);
     };
@@ -99,6 +105,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
             transform: `translate(${label.x}px, ${label.y}px)`,
             transitionDelay: visible ? `${index * 90}ms` : "0ms",
             ["--stem" as string]: `${STEM + label.lift}px`,
+            ["--shift" as string]: `${label.shift}px`,
           }}
         >
           <span className="label-dot" />

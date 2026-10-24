@@ -72,6 +72,11 @@ export function screenPoint(map: maplibregl.Map, lngLat: [number, number]): mapl
   return map.transform.locationToScreenPoint(maplibregl.LngLat.convert(lngLat), fixed);
 }
 
+/** Same breakpoint as the stylesheet's phone layout. */
+export function phone(): boolean {
+  return window.matchMedia("(max-width: 900px)").matches;
+}
+
 type SalesClock = { t: Float64Array; on: Uint8Array; pulsing: Set<number> };
 const clocks = new WeakMap<maplibregl.Map, SalesClock>();
 
@@ -396,11 +401,15 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
       attributionControl: { compact: true },
       fadeDuration: 300,
       // No MSAA: on a terrain map it costs a good share of every frame, and over satellite imagery it shows nowhere.
+      // Phones render at most 1.5 device pixels per CSS pixel: a 3x screen would otherwise draw nine times the pixels.
+      pixelRatio: Math.min(window.devicePixelRatio || 1, phone() ? 1.5 : 2),
     });
     let alive = true;
     map.on("load", () => {
       if (!alive) return;
       addDataLayers(map, data);
+      // No 3D buildings on phones: they are a third of each frame and unreadable at that size anyway.
+      if (phone() && map.getLayer("buildings")) map.removeLayer("buildings");
       collapseAttribution(map);
       onReady(map);
     });

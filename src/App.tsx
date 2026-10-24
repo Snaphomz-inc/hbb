@@ -559,7 +559,7 @@ export function App() {
       {data && <MapScene key={data.slug} data={data} onReady={setMap} />}
       <div className="spacers">
         {chapters.map((c) => (
-          <section key={c.id} style={{ height: `${c.height * 100}vh` }} />
+          <section key={c.id} style={{ ["--h" as string]: c.height * 100 }} />
         ))}
       </div>
 
