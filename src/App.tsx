@@ -13,6 +13,8 @@ import { useScrollStory } from "./story/useScrollStory";
 import type { IndexEntry, Neighborhood } from "./types";
 import { city } from "./city";
 import { homesUrl, listingUrl } from "./links";
+// The brand wordmark (design team's Logo.svg, fills set to currentColor so it takes the header's colour).
+import logoSvg from "./assets/logo.svg?raw";
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`;
 
@@ -564,9 +566,7 @@ export function App() {
       </div>
 
       <header className="top">
-        <a className="wordmark" href="#/" onClick={(event) => { event.preventDefault(); pick(""); }}>
-          snaphomz<span className="wordmark-dot">.</span>
-        </a>
+        <a className="wordmark" href="#/" aria-label="Snaphomz" onClick={(event) => { event.preventDefault(); pick(""); }} dangerouslySetInnerHTML={{ __html: logoSvg }} />
         <div className="top-right">
           <span className="poc">{city.name} neighborhoods</span>
           <select className="select" value={slug} onChange={(event) => pick(event.target.value)} aria-label="Neighborhood">
@@ -587,7 +587,7 @@ export function App() {
 
       {error && (
         <div className="splash">
-          <div className="splash-mark">snaphomz</div>
+          <div className="splash-mark" aria-label="Snaphomz" dangerouslySetInnerHTML={{ __html: logoSvg }} />
           <p>{error}</p>
           {index.length > 0 && (
             <p>
@@ -600,7 +600,7 @@ export function App() {
       )}
       {!error && !overview && (!data || !map) && (
         <div className="splash">
-          <div className="splash-mark">snaphomz</div>
+          <div className="splash-mark" aria-label="Snaphomz" dangerouslySetInnerHTML={{ __html: logoSvg }} />
           <p>Loading {index.find((e) => e.slug === slug)?.name ?? "the neighborhood"}…</p>
         </div>
       )}

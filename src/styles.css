@@ -102,15 +102,23 @@ select {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
   color: var(--paper);
   text-decoration: none;
-  font-weight: 700;
-  font-size: 22px;
-  letter-spacing: -0.03em;
 }
 
-.wordmark-dot {
-  color: var(--lime);
+.wordmark svg {
+  display: block;
+  height: 20px;
+  width: auto;
+}
+
+.splash-mark svg {
+  display: block;
+  height: 26px;
+  width: auto;
+  margin: 0 auto;
 }
 
 .top-right {
