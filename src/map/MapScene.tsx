@@ -199,7 +199,13 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
   const priceColor = ["step", ["get", "price"], "#7dd3fc", low, "#DCF763", high, "#fb7185"];
   // Zoom must be the outer expression, so the on/off switch sits inside each stop.
   const shown = ["boolean", ["feature-state", "on"], false];
-  const dotRadius = ["interpolate", ["linear"], ["zoom"], 12, ["case", shown, 2.2, 0], 14, ["case", shown, 3.6, 0], 16, ["case", shown, 7, 0]];
+  // Hover state is seconds since the pointer arrived (-1 when it is elsewhere): the dot swells over the first
+  // fifth of a second. The zoom interpolate has to stay outermost, so the swell sits inside each stop.
+  const hoverT = ["coalesce", ["feature-state", "hover"], -1];
+  const swell = ["interpolate", ["linear"], hoverT, -1, 1, 0, 1, 0.2, 1.9];
+  const stop = (base: number) => ["case", shown, ["*", base, swell], 0];
+  const dotRadius = ["interpolate", ["linear"], ["zoom"], 12, stop(2.2), 14, stop(3.6), 16, stop(7)];
+  const hovered = [">=", hoverT, 0];
   const salesSource: GeoJsonFeatureCollection = {
     type: "FeatureCollection",
     features: data.sales.map(([lon, lat, price, sqft, kind, beds, monthsAgo, listing, address], i) => ({
@@ -238,13 +244,29 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
         // Hidden until the timeline reaches the sale; see setSalesClock.
         "circle-radius": dotRadius,
         "circle-color": priceColor,
-        "circle-stroke-color": "#0b1220",
-        "circle-stroke-width": 0.8,
+        "circle-stroke-color": ["case", hovered, "#ffffff", "#0b1220"],
+        "circle-stroke-width": ["case", hovered, 2, 0.8],
         "circle-pitch-alignment": "map",
       },
       TARGETS.sales,
     ),
   } as maplibregl.LayerSpecification);
+  // The hover ping: while the pointer rests on a dot, a ring in its colour swims out from it every second
+  // (feature state "ring" runs 0 to 1 per cycle; see holdSaleHover in App). Elsewhere it is drawn at opacity 0.
+  const ring = ["coalesce", ["feature-state", "ring"], 1];
+  map.addLayer({
+    id: "sales-hover",
+    type: "circle",
+    source: "sales",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ring, 0, 4, 1, 26],
+      "circle-color": "rgba(0, 0, 0, 0)",
+      "circle-stroke-color": priceColor,
+      "circle-stroke-width": ["interpolate", ["linear"], ring, 0, 2.5, 1, 1],
+      "circle-stroke-opacity": ["interpolate", ["linear"], ring, 0, 0.95, 0.7, 0.35, 1, 0],
+      "circle-pitch-alignment": "map",
+    },
+  } as unknown as maplibregl.LayerSpecification);
   // The pulse: a ring that grows and fades for a moment after each sale lands.
   map.addLayer({
     id: "sales-pulse",

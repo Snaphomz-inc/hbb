@@ -197,6 +197,8 @@ export function App() {
   const teasersRef = useRef<Teaser[]>(teasers);
   teasersRef.current = teasers;
   const teaserSpots = useRef<TeaserSpots>([]);
+  // The dot under the pointer swells and pings while the pointer rests on it, so there is no doubt which one is live.
+  const hovering = useRef<{ id: number; since: number; frame: number } | null>(null);
   const teasersCleared = useRef(false);
 
   useEffect(() => {
@@ -418,6 +420,32 @@ export function App() {
       const p = best.properties as { price: number; beds: number; sqft: number; kind: number; listing?: string; address?: string };
       return { id: best.id as number, teaser: false, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind, listing: p.listing ?? "", address: p.address ?? "" };
     };
+    const releaseHover = () => {
+      const current = hovering.current;
+      if (!current) return;
+      cancelAnimationFrame(current.frame);
+      hovering.current = null;
+      if (mapAlive(map) && map.getSource("sales")) map.setFeatureState({ source: "sales", id: current.id }, { hover: -1, ring: 1 });
+    };
+    const holdSaleHover = (id: number) => {
+      if (hovering.current?.id === id) return;
+      releaseHover();
+      const since = performance.now();
+      const state = { id, since, frame: 0 };
+      hovering.current = state;
+      const ping = (now: number) => {
+        if (hovering.current !== state) return;
+        // The chapter may have scrolled away under a resting pointer.
+        if (!mapAlive(map) || !chapterRef.current?.layers.includes("sales")) {
+          releaseHover();
+          return;
+        }
+        const t = (now - since) / 1000;
+        map.setFeatureState({ source: "sales", id }, { hover: t, ring: (t % 1.1) / 1.1 });
+        state.frame = requestAnimationFrame(ping);
+      };
+      state.frame = requestAnimationFrame(ping);
+    };
     const onClick = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
       if (hit?.listing) {
@@ -431,9 +459,11 @@ export function App() {
       holdDrift.current = Boolean(hit);
       map.getCanvas().style.cursor = hit ? "pointer" : "";
       if (!hit) {
+        releaseHover();
         setSaleTip((tip) => (tip ? null : tip));
         return;
       }
+      holdSaleHover(hit.id);
       // A teaser dot already shows its card; any other dot takes the teasers down for good.
       if (hit.teaser) {
         setSaleTip((tip) => (tip ? null : tip));
@@ -448,6 +478,7 @@ export function App() {
     };
     const onLeave = () => {
       holdDrift.current = false;
+      releaseHover();
       map.getCanvas().style.cursor = "";
       setSaleTip(null);
     };
@@ -456,6 +487,7 @@ export function App() {
     map.on("mouseout", onLeave);
     const warm = window.setTimeout(preloadMaps3d, 2500);
     return () => {
+      releaseHover();
       if (mapAlive(map)) {
         map.off("click", onClick);
         map.off("mousemove", onMove);
