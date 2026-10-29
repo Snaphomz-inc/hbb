@@ -35,15 +35,12 @@ export function Neighbors({
   index,
   current,
   onPick,
-  onHold,
   hidden,
 }: {
   map: maplibregl.Map;
   index: IndexEntry[];
   current: string;
   onPick: (slug: string) => void;
-  /** The pointer is over a pill: the camera should hold still so the pill stays under it. */
-  onHold: (held: boolean) => void;
   hidden: boolean;
 }) {
   const neighbors = useMemo(() => {
@@ -229,8 +226,6 @@ export function Neighbors({
           className={`neighbor ${pill.near ? "neighbor-near" : ""} ${!hidden && pill.onScreen ? "in" : ""}`}
           style={{ width: pill.w }}
           onClick={() => onPick(pill.slug)}
-          onMouseEnter={() => onHold(true)}
-          onMouseLeave={() => onHold(false)}
           title={`Fly to ${pill.name}`}
         >
           <span className="neighbor-arrow" aria-hidden="true">{pill.near ? "•" : pill.arrow}</span>

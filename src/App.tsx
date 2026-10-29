@@ -227,8 +227,6 @@ export function App() {
   const tipNode = useRef<HTMLDivElement>(null);
   const tipAt = useRef({ x: 0, y: 0 });
   const tipFor = useRef(-1);
-  // While the pointer rests on a dot the camera drift pauses, so the dot stays under the cursor.
-  const holdDrift = useRef(false);
   // A couple of dots show their card unprompted once they land, so the link is discoverable; the
   // first hover on any other dot clears them for the rest of the chapter.
   const [teasers, setTeasers] = useState<Teaser[]>([]);
@@ -309,11 +307,11 @@ export function App() {
       const fit = zoomToFit(widthDegrees, map.getContainer().clientWidth, 0.8);
       const dt = lastNow ? now - lastNow : 0;
       lastNow = now;
-      // The drift eases to rest once the page has been left alone, and quickly while the pointer rests on
-      // a dot or a pill; a hard stop there made the whole map jerk with every dot the pointer crossed.
+      // The drift eases to rest once the page has been left alone. Hovering never touches it: pausing it
+      // for a dot or a pill under the pointer made the map stutter with every dot a sweep crossed, and at
+      // a couple of pixels a second the drift is slow enough that nothing escapes the cursor.
       const idle = now - lastActivity > IDLE_MS;
-      const hold = holdDrift.current;
-      pace = Math.min(1, Math.max(0, pace + (hold ? -dt / 300 : idle ? -dt / 1500 : dt / 800)));
+      pace = Math.min(1, Math.max(0, pace + (idle ? -dt / 1500 : dt / 800)));
       driftNow += dt * pace;
       const drift = still ? 0 : Math.sin(driftNow / 9000) * 2.2;
       const breathe = still ? 0 : Math.sin(driftNow / 13000) * 0.04;
@@ -635,7 +633,6 @@ export function App() {
     };
     const hitTest = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
-      holdDrift.current = Boolean(hit);
       map.getCanvas().style.cursor = hit ? "pointer" : "";
       if (!hit) {
         releaseHover();
@@ -664,7 +661,6 @@ export function App() {
       }
     };
     const onLeave = () => {
-      holdDrift.current = false;
       releaseHover();
       map.getCanvas().style.cursor = "";
       clearTip();
@@ -867,9 +863,6 @@ export function App() {
             index={index}
             current={slug}
             onPick={hop}
-            onHold={(held) => {
-              holdDrift.current = held;
-            }}
             hidden={explore !== "off"}
           />
 
