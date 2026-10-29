@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { distanceM } from "../lib/geo";
 import { phone, screenPoint } from "../map/MapScene";
 import type { IndexEntry } from "../types";
@@ -9,7 +10,7 @@ type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 /** Arrow glyphs by screen direction, 45° steps clockwise from "to the right" (screen y points down). */
 const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
-const HEIGHT = 30;
+const HEIGHT = 40;
 const PAD = 14;
 
 function overlaps(a: Rect, b: Rect): boolean {
@@ -17,7 +18,7 @@ function overlaps(a: Rect, b: Rect): boolean {
 }
 
 function pillWidth(name: string): number {
-  return Math.round(name.length * 7.4 + 44);
+  return Math.round(Math.max(name.length * 7.4, 76) + 46);
 }
 
 /**
@@ -43,7 +44,7 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
       return;
     }
     let frame = 0;
-    const update = () => {
+    const update = (sync: boolean) => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const wide = width > 900;
@@ -94,13 +95,16 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
         if (onScreen) taken.push(rect);
         return { slug: entry.slug, name: entry.name, x, y, w, arrow, near, onScreen };
       });
-      setPlaced(next);
+      if (sync) flushSync(() => setPlaced(next));
+      else setPlaced(next);
     };
+    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
+    // events and the overlays would only catch up once the zoom stops.
     const schedule = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
+      frame = requestAnimationFrame(() => update(true));
     };
-    update();
+    update(false);
     map.on("move", schedule);
     map.on("resize", schedule);
     // The text blocks fade in and out with the chapters; look again as that settles.
@@ -125,7 +129,10 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
           title={`Fly to ${pill.name}`}
         >
           <span className="neighbor-arrow" aria-hidden="true">{pill.near ? "•" : pill.arrow}</span>
-          <span className="neighbor-name">{pill.name}</span>
+          <span className="neighbor-text">
+            <span className="neighbor-name">{pill.name}</span>
+            <span className="neighbor-go">view its story →</span>
+          </span>
         </button>
       ))}
     </div>

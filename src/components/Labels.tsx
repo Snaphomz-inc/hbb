@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { screenPoint } from "../map/MapScene";
 import type { Label } from "../story/chapters";
 
@@ -31,7 +32,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
 
   useEffect(() => {
     let frame = 0;
-    const update = () => {
+    const update = (sync: boolean) => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const wide = width > 900;
@@ -79,13 +80,16 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
         if (onScreen && rect) taken.push(rect);
         next.push({ ...label, x: point.x, y: point.y, lift, onScreen, flip, shift });
       }
-      setPlaced(next);
+      if (sync) flushSync(() => setPlaced(next));
+      else setPlaced(next);
     };
+    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
+    // events and the overlays would only catch up once the zoom stops.
     const schedule = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
+      frame = requestAnimationFrame(() => update(true));
     };
-    update();
+    update(false);
     map.on("move", schedule);
     map.on("resize", schedule);
     return () => {

@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useState, type MutableRefObject } from "react";
+import { flushSync } from "react-dom";
 import { money } from "../lib/format";
 import { listingUrl } from "../links";
 import { screenPoint } from "../map/MapScene";
@@ -31,7 +32,7 @@ export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teas
       return;
     }
     let frame = 0;
-    const update = () => {
+    const update = (sync: boolean) => {
       const rect = map.getCanvas().getBoundingClientRect();
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
@@ -41,13 +42,16 @@ export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teas
         return { ...teaser, x: rect.left + point.x, y: rect.top + point.y, onScreen };
       });
       spots.current = next.map((t) => ({ id: t.id, x: t.x, y: t.y }));
-      setPlaced(next);
+      if (sync) flushSync(() => setPlaced(next));
+      else setPlaced(next);
     };
+    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
+    // events and the overlays would only catch up once the zoom stops.
     const schedule = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
+      frame = requestAnimationFrame(() => update(true));
     };
-    update();
+    update(false);
     map.on("move", schedule);
     map.on("resize", schedule);
     return () => {

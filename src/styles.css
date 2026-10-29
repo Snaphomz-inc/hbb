@@ -182,78 +182,77 @@ select {
   color: rgba(255, 255, 255, 0.7);
 }
 
-/* The progress bar is one mark per chapter; each is a button that flies to its chapter. */
+/* The chapter rail: a floating bar of named marks, each a button that flies to its chapter. */
 .progress {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(640px, calc(100vw - 32px));
   display: flex;
-  gap: 3px;
+  gap: 8px;
+  padding: 9px 12px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
   z-index: 20;
 }
 
 .progress-seg {
-  position: relative;
-  flex-basis: 0;
-  height: 18px;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
+  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
+  transition: color 150ms;
 }
 
-.progress-seg::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.14);
-  transition: height 150ms;
+.progress-seg:hover,
+.progress-seg:focus-visible {
+  color: #fff;
+  outline: none;
 }
 
-.progress-fill {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 3px;
-  background: var(--lime);
-  transform-origin: left;
-  transition: transform 120ms linear, height 150ms;
-}
-
-.progress-seg:hover::before,
-.progress-seg:hover .progress-fill {
-  height: 5px;
+.progress-seg.is-on {
+  color: var(--lime);
 }
 
 .progress-name {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translate(-50%, 4px);
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.85);
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 4px 8px;
   white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 150ms, transform 150ms;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.progress-seg:hover .progress-name,
-.progress-seg:focus-visible .progress-name {
-  opacity: 1;
-  transform: translate(-50%, 0);
+.progress-track {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  transition: height 150ms;
+}
+
+.progress-seg:hover .progress-track {
+  height: 6px;
+}
+
+.progress-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--lime);
+  transform-origin: left;
+  transition: transform 120ms linear;
 }
 
 /* Free look: the way in is written beside the look-around button; the way back takes its place. */
@@ -316,12 +315,11 @@ select {
   top: 0;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 30px;
+  gap: 8px;
+  height: 40px;
   padding: 0 12px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--panel);
   color: rgba(255, 255, 255, 0.85);
   font-family: var(--mono);
@@ -348,7 +346,26 @@ select {
 
 .neighbor-arrow {
   color: var(--lime);
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.neighbor-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.neighbor-name {
+  color: #fff;
+}
+
+.neighbor-go {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--lime);
+  opacity: 0.85;
 }
 
 .neighbor-near .neighbor-arrow {
@@ -358,9 +375,9 @@ select {
 
 .scroll-hint {
   position: fixed;
-  left: 50%;
+  left: 28px;
   bottom: 18px;
-  transform: translate(-50%, 8px);
+  transform: translate(0, 8px);
   z-index: 20;
   font-family: var(--mono);
   font-size: 11px;
@@ -378,7 +395,7 @@ select {
 
 .scroll-hint.show {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(0, 0);
 }
 
 .scroll-hint .arrow {
@@ -1538,6 +1555,15 @@ html.exploring .look-around {
     left: 16px;
     bottom: 12px;
     padding: 6px 10px;
+  }
+  .progress {
+    bottom: 54px;
+    width: calc(100vw - 32px);
+    padding: 8px 10px;
+    gap: 5px;
+  }
+  .progress-name {
+    display: none;
   }
 }
 

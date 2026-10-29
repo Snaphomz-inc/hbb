@@ -214,6 +214,10 @@ export function App() {
   // story stops steering it until the next page scroll, Escape or the "back to the tour" chip.
   const free = useRef(false);
   const [freeLook, setFreeLook] = useState(false);
+  // While a button or finger is down the loop leaves the camera alone: each jumpTo resets MapLibre's
+  // gesture handlers, so a drag begun while the drift was moving would never become one, and its
+  // release would land as a click.
+  const pressed = useRef(false);
   // The sale a click flew down to; its card stays pinned until free look ends.
   const focused = useRef<number | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
@@ -285,7 +289,7 @@ export function App() {
     const tick = (now: number) => {
       if (!mapAlive(map)) return;
       // In free look the reader has the camera; keep the clock honest and wait.
-      if (free.current) {
+      if (free.current || pressed.current) {
         lastNow = now;
         frame = requestAnimationFrame(tick);
         return;
@@ -609,14 +613,33 @@ export function App() {
       if (event.touches.length >= 2) actions.current.enterFree();
     };
     const onScroll = () => actions.current.leaveFree();
+    const onPress = () => {
+      pressed.current = true;
+    };
+    const onRelease = (event: MouseEvent | TouchEvent) => {
+      if ("touches" in event && event.touches.length > 0) return;
+      pressed.current = false;
+    };
+    // The hover card sits where the pointer was; once the map slides under a still pointer it is stale.
+    const onMapMove = () => {
+      if (!free.current) return;
+      releaseHover();
+      setSaleTip((tip) => (tip ? null : tip));
+    };
     const gestures = ["dragstart", "zoomstart", "rotatestart", "pitchstart"] as const;
     const canvas = map.getCanvas();
     map.on("click", onClick);
     map.on("mousemove", onMove);
     map.on("mouseout", onLeave);
+    map.on("move", onMapMove);
     for (const name of gestures) map.on(name, grab);
     canvas.addEventListener("wheel", onWheel, { passive: true });
     canvas.addEventListener("touchstart", onTouch, { passive: true });
+    canvas.addEventListener("mousedown", onPress);
+    canvas.addEventListener("touchstart", onPress, { passive: true });
+    window.addEventListener("mouseup", onRelease);
+    window.addEventListener("touchend", onRelease);
+    window.addEventListener("touchcancel", onRelease);
     window.addEventListener("scroll", onScroll, { passive: true });
     const warm = window.setTimeout(preloadMaps3d, 2500);
     return () => {
@@ -625,11 +648,18 @@ export function App() {
         map.off("click", onClick);
         map.off("mousemove", onMove);
         map.off("mouseout", onLeave);
+        map.off("move", onMapMove);
         for (const name of gestures) map.off(name, grab);
       }
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("touchstart", onTouch);
+      canvas.removeEventListener("mousedown", onPress);
+      canvas.removeEventListener("touchstart", onPress);
+      window.removeEventListener("mouseup", onRelease);
+      window.removeEventListener("touchend", onRelease);
+      window.removeEventListener("touchcancel", onRelease);
       window.removeEventListener("scroll", onScroll);
+      pressed.current = false;
       window.clearTimeout(warm);
     };
   }, [map]);
@@ -835,12 +865,13 @@ export function App() {
                 key={c.id}
                 type="button"
                 className={`progress-seg ${i === position.active ? "is-on" : ""}`}
-                style={{ flexGrow: c.height }}
                 onClick={() => goToChapter(i)}
                 title={chapterName(c)}
               >
-                <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
                 <span className="progress-name">{chapterName(c)}</span>
+                <span className="progress-track">
+                  <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
+                </span>
               </button>
             ))}
           </nav>
@@ -848,7 +879,7 @@ export function App() {
             <span aria-hidden="true">↩</span> back to the tour
           </button>
           <div className={`free-hint ${!freeLook && explore === "off" && chapter.kind !== "hero" ? "show" : ""}`} aria-hidden="true">
-            drag the map to look around · ctrl + scroll zooms
+            drag to look around · ctrl + scroll zooms
           </div>
 
           {saleTip && (
