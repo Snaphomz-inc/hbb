@@ -397,7 +397,15 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
       pitch: 55,
       bearing: data.camera.bearing ?? 30,
       maxPitch: 80,
-      interactive: false,
+      minZoom: 8,
+      maxZoom: 18.5,
+      // Free look: a drag pans, ctrl + scroll zooms, two fingers on a phone; plain scrolling stays with the
+      // story. The keys go to the chapters instead, and a double click would fight the click into look-around.
+      interactive: true,
+      cooperativeGestures: true,
+      keyboard: false,
+      doubleClickZoom: false,
+      boxZoom: false,
       attributionControl: { compact: true },
       fadeDuration: 300,
       // No MSAA: on a terrain map it costs a good share of every frame, and over satellite imagery it shows nowhere.

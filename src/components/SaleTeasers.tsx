@@ -59,26 +59,32 @@ export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teas
 
   return (
     <>
-      {placed.map((teaser) => (
-        <a
-          key={teaser.id}
-          className={`sale-tip is-teaser ${teaser.onScreen ? "show" : ""}`}
-          style={{ left: teaser.x, top: teaser.y }}
-          href={listingUrl(teaser.listing)}
-          target="_blank"
-          rel="noreferrer"
-          title="Open the listing on Snaphomz"
-        >
-          <div className="sale-tip-price">{money(teaser.price)}</div>
-          {teaser.address && <div className="sale-tip-address">{teaser.address}</div>}
-          <div className="sale-tip-meta">
-            {teaser.beds > 0 ? `${teaser.beds} bd · ` : ""}
-            {teaser.sqft > 0 ? `${teaser.sqft.toLocaleString()} sqft · ` : ""}
-            {saleKindName(teaser.kind)}
+      {placed.map((teaser) => {
+        const card = (
+          <>
+            <div className="sale-tip-price">{money(teaser.price)}</div>
+            {teaser.address && <div className="sale-tip-address">{teaser.address}</div>}
+            <div className="sale-tip-meta">
+              {teaser.beds > 0 ? `${teaser.beds} bd · ` : ""}
+              {teaser.sqft > 0 ? `${teaser.sqft.toLocaleString()} sqft · ` : ""}
+              {saleKindName(teaser.kind)}
+            </div>
+            {teaser.listing && <div className="sale-tip-hint">Open the listing on Snaphomz ↗</div>}
+          </>
+        );
+        const className = `sale-tip is-teaser ${teaser.onScreen ? "show" : ""}`;
+        const style = { left: teaser.x, top: teaser.y };
+        // A focused sale without a listing page still gets its card, just not as a link.
+        return teaser.listing ? (
+          <a key={teaser.id} className={className} style={style} href={listingUrl(teaser.listing)} target="_blank" rel="noreferrer" title="Open the listing on Snaphomz">
+            {card}
+          </a>
+        ) : (
+          <div key={teaser.id} className={`${className} no-link`} style={style}>
+            {card}
           </div>
-          <div className="sale-tip-hint">Open the listing on Snaphomz ↗</div>
-        </a>
-      ))}
+        );
+      })}
     </>
   );
 }

@@ -58,6 +58,15 @@ select {
   z-index: 0;
 }
 
+/* The map takes gestures, but its own "use ctrl + scroll" overlay would flash on every story scroll. */
+.map .maplibregl-cooperative-gesture-screen {
+  display: none;
+}
+
+.map .maplibregl-canvas:focus {
+  outline: none;
+}
+
 .map .maplibregl-ctrl-attrib {
   background: rgba(11, 18, 32, 0.6);
   color: rgba(255, 255, 255, 0.6);
@@ -173,21 +182,178 @@ select {
   color: rgba(255, 255, 255, 0.7);
 }
 
+/* The progress bar is one mark per chapter; each is a button that flies to its chapter. */
 .progress {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  gap: 3px;
   z-index: 20;
 }
 
-.progress-bar {
-  height: 100%;
+.progress-seg {
+  position: relative;
+  flex-basis: 0;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.progress-seg::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.14);
+  transition: height 150ms;
+}
+
+.progress-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
   background: var(--lime);
   transform-origin: left;
-  transition: transform 120ms linear;
+  transition: transform 120ms linear, height 150ms;
+}
+
+.progress-seg:hover::before,
+.progress-seg:hover .progress-fill {
+  height: 5px;
+}
+
+.progress-name {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translate(-50%, 4px);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms, transform 150ms;
+}
+
+.progress-seg:hover .progress-name,
+.progress-seg:focus-visible .progress-name {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Free look: the way in is written beside the look-around button; the way back takes its place. */
+.free-hint,
+.tour-back {
+  position: fixed;
+  right: 170px;
+  bottom: 14px;
+  z-index: 20;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 12px;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  transition: opacity 400ms ease, border-color 200ms, color 200ms;
+}
+
+.free-hint.show {
+  opacity: 1;
+}
+
+.tour-back {
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+}
+
+.tour-back span {
+  color: var(--lime);
+  margin-right: 4px;
+}
+
+.tour-back.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tour-back:hover {
+  border-color: var(--lime);
+  color: #fff;
+}
+
+/* Next door: pills pinned where the neighbours lie, or against the edge in their direction. */
+.neighbors {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+}
+
+.neighbor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: rgba(255, 255, 255, 0.85);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
+  transition: opacity 300ms ease, border-color 200ms, color 200ms;
+}
+
+.neighbor.in {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.neighbor:hover {
+  border-color: var(--lime);
+  color: #fff;
+}
+
+.neighbor-arrow {
+  color: var(--lime);
+  font-size: 12px;
+}
+
+.neighbor-near .neighbor-arrow {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .scroll-hint {
@@ -253,6 +419,8 @@ select {
 .hero {
   display: flex;
   flex-direction: column;
+  /* Each block is only as wide as its text, so the map beside the headline still takes the mouse. */
+  align-items: flex-start;
   justify-content: flex-end;
   padding: 0 28px 72px;
   background: linear-gradient(to top, rgba(11, 18, 32, 0.78) 0%, rgba(11, 18, 32, 0.25) 45%, rgba(11, 18, 32, 0) 70%);
@@ -1360,6 +1528,16 @@ html.exploring .look-around {
   }
   .explore-hint {
     display: none;
+  }
+  /* Two fingers need no explanation; the way back sits where the scroll hint was. */
+  .free-hint {
+    display: none;
+  }
+  .tour-back {
+    right: auto;
+    left: 16px;
+    bottom: 12px;
+    padding: 6px 10px;
   }
 }
 

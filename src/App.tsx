@@ -1,6 +1,7 @@
 import type maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
+import { Neighbors } from "./components/Neighbors";
 import { Explore, exploreAvailable, preloadMaps3d, type ViewCamera } from "./explore/Explore";
 import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
@@ -30,6 +31,26 @@ export const DIVE_BEARING = 14;
 
 /** How long the page is left alone before the camera drift eases to rest. */
 const IDLE_MS = 8000;
+
+/** Names for the chapter marks along the bottom; a chapter missing here goes by its id. */
+const CHAPTER_NAMES: Record<string, string> = {
+  hero: "Start",
+  homes: "Homes",
+  trend: "Prices",
+  places: "Places",
+  commute: "Commute",
+  schools: "Schools",
+  risks: "Risks",
+  permits: "Building",
+  closing: "Next",
+};
+
+function chapterName(chapter: Chapter): string {
+  return CHAPTER_NAMES[chapter.id] ?? chapter.id[0].toUpperCase() + chapter.id.slice(1);
+}
+
+/** The camera a hop to a neighbour leaves behind, for the next neighborhood to glide in from. */
+let arrival: ViewCamera | null = null;
 
 function smoothstep(x: number): number {
   const t = Math.min(1, Math.max(0, x));
@@ -187,8 +208,14 @@ export function App() {
   const lastCamera = useRef("");
   // The look-around view (Google 3D) opens on the story's current camera and hands its own back on exit.
   const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
-  const resume = useRef<{ from: ViewCamera; at: number } | null>(null);
+  const resume = useRef<{ from: ViewCamera; at: number; ms?: number } | null>(null);
   const dive = useRef<{ at: number } | null>(null);
+  // Free look: a drag, a ctrl + scroll or a two-finger gesture hands the camera to the reader, and the
+  // story stops steering it until the next page scroll, Escape or the "back to the tour" chip.
+  const free = useRef(false);
+  const [freeLook, setFreeLook] = useState(false);
+  // The sale a click flew down to; its card stays pinned until free look ends.
+  const focused = useRef<number | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
   const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number; address: string } | null>(null);
   // While the pointer rests on a dot the camera drift pauses, so the dot stays under the cursor.
@@ -219,6 +246,9 @@ export function App() {
     setMap(null);
     setError(null);
     lastCamera.current = "";
+    free.current = false;
+    setFreeLook(false);
+    focused.current = null;
     window.scrollTo({ top: 0 });
     if (slug === "") return;
     fetch(`${DATA_BASE}/${slug}.json`)
@@ -254,6 +284,12 @@ export function App() {
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const tick = (now: number) => {
       if (!mapAlive(map)) return;
+      // In free look the reader has the camera; keep the clock honest and wait.
+      if (free.current) {
+        lastNow = now;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       const { cameraT } = positionRef.current;
       const from = Math.min(chapters.length - 1, Math.floor(cameraT));
       const to = Math.min(chapters.length - 1, from + 1);
@@ -286,7 +322,7 @@ export function App() {
       // After look-around, glide from wherever Google left us back to the story.
       const back = resume.current;
       if (back) {
-        const k = Math.min(1, (now - back.at) / 1400);
+        const k = Math.min(1, (now - back.at) / (back.ms ?? 1400));
         const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
         camera.center = [lerp(back.from.center[0], camera.center[0], e), lerp(back.from.center[1], camera.center[1], e)];
         camera.zoom = lerp(back.from.zoom, camera.zoom, e);
@@ -301,6 +337,11 @@ export function App() {
       }
       frame = requestAnimationFrame(tick);
     };
+    // Arriving from next door: glide in from where the hop left the previous camera.
+    if (arrival) {
+      resume.current = { from: arrival, at: performance.now(), ms: 2400 };
+      arrival = null;
+    }
     frame = requestAnimationFrame(tick);
     return () => {
       cancelAnimationFrame(frame);
@@ -337,7 +378,13 @@ export function App() {
   enterExploreRef.current = enterExplore;
   const exitExplore = (camera: ViewCamera) => {
     if (explore !== "on") return;
-    resume.current = { from: { ...camera, pitch: Math.min(80, Math.max(0, camera.pitch)) }, at: performance.now() };
+    const pitch = Math.min(80, Math.max(0, camera.pitch));
+    if (free.current && map && mapAlive(map)) {
+      // Look-around opened on a free camera, so it comes back to one: the map picks up Google's last view as is.
+      map.jumpTo({ center: camera.center, zoom: camera.zoom, pitch, bearing: camera.bearing });
+    } else {
+      resume.current = { from: { ...camera, pitch }, at: performance.now() };
+    }
     dive.current = null;
     setExplore("closing");
     window.setTimeout(() => setExplore("off"), 500);
@@ -346,6 +393,66 @@ export function App() {
   const chapter: Chapter | undefined = chapters[position.active];
   const chapterRef = useRef(chapter);
   chapterRef.current = chapter;
+
+  const enterFree = () => {
+    if (free.current || !map || !mapAlive(map)) return;
+    free.current = true;
+    setFreeLook(true);
+  };
+  /** Hand the camera back: it glides from wherever the reader left it to the chapter's view. */
+  const leaveFree = () => {
+    if (!free.current) return;
+    free.current = false;
+    setFreeLook(false);
+    if (focused.current !== null) {
+      focused.current = null;
+      setTeasers([]);
+    }
+    if (!map || !mapAlive(map)) return;
+    map.stop();
+    resume.current = { from: readCamera(), at: performance.now() };
+  };
+
+  /** Scroll to a chapter, far enough in that its text has settled. */
+  const goToChapter = (index: number) => {
+    if (chapters.length === 0) return;
+    const i = Math.min(chapters.length - 1, Math.max(0, index));
+    let top = 0;
+    for (let k = 0; k < i; k += 1) top += chapters[k].height * window.innerHeight;
+    if (i > 0 && i < chapters.length - 1) top += chapters[i].height * window.innerHeight * 0.12;
+    window.scrollTo({ top: Math.round(top), behavior: "smooth" });
+  };
+
+  /** Fly down to a sale and pin its card; a second click on the dot, or the card, opens the listing. */
+  const focusSale = (sale: Teaser) => {
+    if (!map || !mapAlive(map)) return;
+    enterFree();
+    focused.current = sale.id;
+    teasersCleared.current = true;
+    setSaleTip(null);
+    setTeasers([sale]);
+    map.easeTo({ center: [sale.lon, sale.lat], zoom: Math.max(map.getZoom(), 16.6), pitch: 62, bearing: map.getBearing() + 18, duration: 1500, essential: true });
+  };
+
+  /**
+   * Go next door the immersive way: fly toward the neighbour before switching to it, and let the
+   * next neighborhood glide in from there, so the change reads as a move across the map.
+   */
+  const hop = (next: string) => {
+    const entry = index.find((e) => e.slug === next);
+    if (!map || !mapAlive(map) || !entry || next === slug || explore !== "off") {
+      pick(next);
+      return;
+    }
+    enterFree();
+    map.easeTo({ center: entry.center, zoom: Math.max(11, map.getZoom() - 0.9), pitch: Math.min(map.getPitch(), 50), duration: 1100, essential: true });
+    window.setTimeout(() => {
+      if (mapAlive(map)) arrival = readCamera();
+      pick(next);
+    }, 1000);
+  };
+  const actions = useRef({ enterFree, leaveFree, focusSale, goToChapter });
+  actions.current = { enterFree, leaveFree, focusSale, goToChapter };
 
   // Sales that could carry a card: with a listing and an address, a house or condo, priced near the
   // median so they read as typical. Which two actually do is decided on screen when the chapter opens.
@@ -398,7 +505,7 @@ export function App() {
   // way into look-around. Google's script is fetched early so the way in is short.
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
-    type SaleHit = { id: number; teaser: boolean; price: number; beds: number; sqft: number; kind: number; listing: string; address: string };
+    type SaleHit = Teaser & { teaser: boolean };
     const saleAt = (point: maplibregl.Point): SaleHit | null => {
       // Dots exist in every chapter but are only drawn in the ones that list the layer, and only once the timeline has reached them.
       if (!chapterRef.current?.layers.includes("sales") || !map.getLayer("sales")) return null;
@@ -420,7 +527,8 @@ export function App() {
       const at = (f: maplibregl.MapGeoJSONFeature) => gap((f.geometry as GeoJSON.Point).coordinates as [number, number]);
       const best = hits.reduce((a, f) => (at(f) < at(a) ? f : a));
       const p = best.properties as { price: number; beds: number; sqft: number; kind: number; listing?: string; address?: string };
-      return { id: best.id as number, teaser: false, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind, listing: p.listing ?? "", address: p.address ?? "" };
+      const [lon, lat] = (best.geometry as GeoJSON.Point).coordinates as [number, number];
+      return { id: best.id as number, teaser: false, lon, lat, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind, listing: p.listing ?? "", address: p.address ?? "" };
     };
     const releaseHover = () => {
       const current = hovering.current;
@@ -450,8 +558,14 @@ export function App() {
     };
     const onClick = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
-      if (hit?.listing) {
-        window.open(listingUrl(hit.listing), "_blank", "noopener");
+      if (hit) {
+        // The first click on a dot flies down to it with its card pinned; a click on the focused dot opens the listing.
+        if (hit.listing && focused.current === hit.id) {
+          window.open(listingUrl(hit.listing), "_blank", "noopener");
+          return;
+        }
+        const { teaser: _teaser, ...sale } = hit;
+        actions.current.focusSale(sale);
         return;
       }
       enterExploreRef.current();
@@ -471,9 +585,9 @@ export function App() {
         setSaleTip((tip) => (tip ? null : tip));
         return;
       }
-      if (teasersRef.current.length > 0) {
+      if (teasersRef.current.some((t) => t.id !== focused.current)) {
         teasersCleared.current = true;
-        setTeasers([]);
+        setTeasers((current) => current.filter((t) => t.id === focused.current));
       }
       const rect = map.getCanvas().getBoundingClientRect();
       setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address });
@@ -484,9 +598,26 @@ export function App() {
       map.getCanvas().style.cursor = "";
       setSaleTip(null);
     };
+    // Any gesture on the map hands the camera over; the next page scroll takes it back.
+    const grab = (event: { originalEvent?: unknown }) => {
+      if (event.originalEvent) actions.current.enterFree();
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.metaKey) actions.current.enterFree();
+    };
+    const onTouch = (event: TouchEvent) => {
+      if (event.touches.length >= 2) actions.current.enterFree();
+    };
+    const onScroll = () => actions.current.leaveFree();
+    const gestures = ["dragstart", "zoomstart", "rotatestart", "pitchstart"] as const;
+    const canvas = map.getCanvas();
     map.on("click", onClick);
     map.on("mousemove", onMove);
     map.on("mouseout", onLeave);
+    for (const name of gestures) map.on(name, grab);
+    canvas.addEventListener("wheel", onWheel, { passive: true });
+    canvas.addEventListener("touchstart", onTouch, { passive: true });
+    window.addEventListener("scroll", onScroll, { passive: true });
     const warm = window.setTimeout(preloadMaps3d, 2500);
     return () => {
       releaseHover();
@@ -494,10 +625,33 @@ export function App() {
         map.off("click", onClick);
         map.off("mousemove", onMove);
         map.off("mouseout", onLeave);
+        for (const name of gestures) map.off(name, grab);
       }
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("touchstart", onTouch);
+      window.removeEventListener("scroll", onScroll);
       window.clearTimeout(warm);
     };
   }, [map]);
+
+  // The keys move through the chapters; Escape hands a free camera back to the story.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
+      if (event.key === "Escape") {
+        actions.current.leaveFree();
+        return;
+      }
+      if (explore !== "off" || chapters.length === 0) return;
+      const step = ["ArrowRight", "ArrowDown", "PageDown"].includes(event.key) ? 1 : ["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key) ? -1 : 0;
+      if (step === 0) return;
+      event.preventDefault();
+      actions.current.goToChapter(positionRef.current.active + step);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chapters, explore, positionRef]);
   const settled = position.progress > 0.06 || position.active === 0;
   const playback = chapter?.kind === "story" && settled ? chapter.playback : undefined;
   const chapterId = chapter?.id;
@@ -608,6 +762,7 @@ export function App() {
       {!overview && data && chapter && map && (
         <>
           <Labels map={map} labels={chapter.labels} visible={chapter.kind === "story" && settled} />
+          <Neighbors map={map} index={index} current={slug} onPick={hop} hidden={explore !== "off"} />
 
           <div className={`hero ${chapter.kind === "hero" ? "show" : ""}`}>
             <h1>
@@ -619,7 +774,7 @@ export function App() {
             <p className="hero-sub">
               {data.market.all.count.toLocaleString()} sales in the last year · median {money(data.market.all.medianPrice)} · {data.region}
             </p>
-            <NeighborhoodChips index={index} current={slug} onPick={pick} title="Nearby" />
+            <NeighborhoodChips index={index} current={slug} onPick={hop} title="Nearby" />
             <div className="sources-strip">
               <span>Built from</span> {city.credits}
             </div>
@@ -664,18 +819,36 @@ export function App() {
                 Fly over it again
               </button>
             </div>
-            <NeighborhoodChips index={index} current={slug} onPick={pick} title="Next door" />
+            <NeighborhoodChips index={index} current={slug} onPick={hop} title="Next door" />
           </div>
 
           <div className={`question-wrap ${chapter.kind === "story" ? "show" : ""}`}>
             {chapter.question && <Question text={chapter.question} />}
           </div>
 
-          <div className={`scroll-hint ${position.overall < 0.97 ? "show" : ""}`}>
+          <div className={`scroll-hint ${position.overall < 0.97 && !freeLook ? "show" : ""}`}>
             scroll <span className="arrow">↓</span>
           </div>
-          <div className="progress">
-            <div className="progress-bar" style={{ transform: `scaleX(${position.overall})` }} />
+          <nav className="progress" aria-label="Chapters">
+            {chapters.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`progress-seg ${i === position.active ? "is-on" : ""}`}
+                style={{ flexGrow: c.height }}
+                onClick={() => goToChapter(i)}
+                title={chapterName(c)}
+              >
+                <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
+                <span className="progress-name">{chapterName(c)}</span>
+              </button>
+            ))}
+          </nav>
+          <button type="button" className={`tour-back ${freeLook && explore === "off" ? "show" : ""}`} onClick={leaveFree}>
+            <span aria-hidden="true">↩</span> back to the tour
+          </button>
+          <div className={`free-hint ${!freeLook && explore === "off" && chapter.kind !== "hero" ? "show" : ""}`} aria-hidden="true">
+            drag the map to look around · ctrl + scroll zooms
           </div>
 
           {saleTip && (
