@@ -105,6 +105,11 @@ export function setSalesClock(map: maplibregl.Map, clock: number | null): void {
   }
 }
 
+/** Which sales the timeline has reached right now (1 per sale index), or null before the layers exist. */
+export function salesOn(map: maplibregl.Map): Uint8Array | null {
+  return clocks.get(map)?.on ?? null;
+}
+
 /** Draw the commute routes from their start to `progress` (0 to 1) of their length. */
 export function setRouteProgress(map: maplibregl.Map, progress: number): void {
   if (!mapAlive(map) || !map.getLayer("routes")) return;
@@ -438,6 +443,11 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
       // Phones render at most 1.5 device pixels per CSS pixel: a 3x screen would otherwise draw nine times the pixels.
       pixelRatio: Math.min(window.devicePixelRatio || 1, phone() ? 1.5 : 2),
     });
+    // MapLibre builds a lngLat for every mouse and touch event by unprojecting the pointer through the
+    // terrain, which reads a pixel back from the GPU and stalls the frame on every pointer move (the
+    // stutter when the pointer crossed the sale dots). Nothing here needs that value, so the map
+    // unprojects through the transform's flat-ground maths instead.
+    map.unproject = (point) => map.transform.screenPointToLocation(maplibregl.Point.convert(point));
     let alive = true;
     map.on("load", () => {
       if (!alive) return;

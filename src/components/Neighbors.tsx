@@ -1,4 +1,5 @@
 import type maplibregl from "maplibre-gl";
+import { LngLat } from "maplibre-gl";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { distanceM } from "../lib/geo";
 import { phone, screenPoint } from "../map/MapScene";
@@ -105,18 +106,20 @@ export function Neighbors({
         const inside = (margin: number) =>
           finite && point.x > edge.x0 + w / 2 + margin && point.x < edge.x1 - w / 2 - margin && point.y > edge.y0 + HEIGHT + margin && point.y < edge.y1 - margin;
         // A pill settles over its centre only where the projection is trustworthy: a point behind the
-        // camera, or past the horizon on a steep pitch, projects somewhere meaningless. The check
-        // projects and unprojects through the same live terrain, so it does not flicker as tiles load.
-        // Settling takes a clear margin inside the view; once settled, a pill stays while its point is
-        // inside, and only leaves by stepping well past the edge.
+        // camera, or past the horizon on a steep pitch, projects somewhere meaningless. The check goes
+        // out and back through the transform's own flat-ground maths (map.unproject on a terrain map
+        // reads a pixel back from the GPU and stalls the frame). Settling takes a clear margin inside
+        // the view; once settled, a pill stays while its point is inside, and only leaves by stepping
+        // well past the edge.
         let near: boolean;
         if (wasNear.get(entry.slug)) {
           near = inside(-10);
+        } else if (inside(28)) {
+          const flat = map.transform.locationToScreenPoint(LngLat.convert(entry.center));
+          const back = Number.isFinite(flat.x) && Number.isFinite(flat.y) ? map.transform.screenPointToLocation(flat) : null;
+          near = back !== null && distanceM([back.lng, back.lat], entry.center) < 400;
         } else {
-          const flat = map.project(entry.center);
-          const back = Number.isFinite(flat.x) && Number.isFinite(flat.y) ? map.unproject([flat.x, flat.y]) : null;
-          const trusted = back !== null && distanceM([back.lng, back.lat], entry.center) < 400;
-          near = trusted && inside(28);
+          near = false;
         }
         wasNear.set(entry.slug, near);
         let x: number;
@@ -143,13 +146,6 @@ export function Neighbors({
           slide = tx < ty ? "y" : "x";
           const angle = Math.atan2(dy, dx);
           arrow = ARROWS[((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8];
-        }
-        // Small moves are eased (half way per update) so a terrain tile arriving under a point, which
-        // shifts its projection a little, does not read as a twitch; a real change of place still snaps.
-        const prev = positions.current.get(entry.slug);
-        if (prev && Math.hypot(x - prev.x, y - prev.y) < 150) {
-          x = prev.x + (x - prev.x) * 0.5;
-          y = prev.y + (y - prev.y) * 0.5;
         }
         let rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
         // Two neighbours in nearly the same direction land on the same edge spot; the later one slides

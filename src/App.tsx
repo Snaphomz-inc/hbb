@@ -7,7 +7,7 @@ import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
 import { useScramble } from "./lib/scramble";
-import { MapScene, PULSE, mapAlive, saleTime, screenPoint, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
+import { MapScene, PULSE, mapAlive, saleTime, salesOn, screenPoint, setRouteProgress, setSalesClock, showLayers } from "./map/MapScene";
 import { SaleTeasers, saleKindName, type Teaser, type TeaserSpots } from "./components/SaleTeasers";
 import { buildChapters, type Chapter } from "./story/chapters";
 import { useScrollStory } from "./story/useScrollStory";
@@ -397,6 +397,8 @@ export function App() {
   const chapter: Chapter | undefined = chapters[position.active];
   const chapterRef = useRef(chapter);
   chapterRef.current = chapter;
+  const dataRef = useRef(data);
+  dataRef.current = data;
 
   const enterFree = () => {
     if (free.current || !map || !mapAlive(map)) return;
@@ -522,17 +524,35 @@ export function App() {
       const spot = teaserSpots.current.find((s) => Math.hypot(s.x - rect.left - point.x, s.y - rect.top - point.y) <= 12);
       const teaser = spot && teasersRef.current.find((t) => t.id === spot.id);
       if (teaser) return { ...teaser, teaser: true };
+      // The dots are matched on the CPU. A rendered-feature query on a terrain map reads a pixel back from
+      // the GPU, which stalls the frame and showed as a hitch whenever the pointer crossed a dot. The ground
+      // under the pointer (flat, no terrain) narrows the search to the sales within a generous reach.
+      const sales = dataRef.current?.sales ?? [];
+      const on = salesOn(map);
+      if (!on) return null;
+      const approx = map.transform.screenPointToLocation(point);
+      const metresPerPixel = (156543.03 * Math.cos((approx.lat * Math.PI) / 180)) / 2 ** map.getZoom();
+      const reach = metresPerPixel * 500;
+      const dLat = reach / 111_320;
+      const dLon = reach / (111_320 * Math.cos((approx.lat * Math.PI) / 180));
       const pad = 9;
-      const hits = map
-        .queryRenderedFeatures([[point.x - pad, point.y - pad], [point.x + pad, point.y + pad]], { layers: ["sales"] })
-        .filter((f) => map.getFeatureState({ source: "sales", id: f.id as number }).on);
-      if (hits.length === 0) return null;
-      // Where dots crowd, the one nearest the pointer wins.
-      const at = (f: maplibregl.MapGeoJSONFeature) => gap((f.geometry as GeoJSON.Point).coordinates as [number, number]);
-      const best = hits.reduce((a, f) => (at(f) < at(a) ? f : a));
-      const p = best.properties as { price: number; beds: number; sqft: number; kind: number; listing?: string; address?: string };
-      const [lon, lat] = (best.geometry as GeoJSON.Point).coordinates as [number, number];
-      return { id: best.id as number, teaser: false, lon, lat, price: p.price, beds: p.beds, sqft: p.sqft, kind: p.kind, listing: p.listing ?? "", address: p.address ?? "" };
+      let best = -1;
+      let bestGap = pad;
+      for (let i = 0; i < sales.length; i += 1) {
+        if (!on[i]) continue;
+        const lon = sales[i][0];
+        const lat = sales[i][1];
+        if (Math.abs(lon - approx.lng) > dLon || Math.abs(lat - approx.lat) > dLat) continue;
+        const d = gap([lon, lat]);
+        // Where dots crowd, the one nearest the pointer wins.
+        if (d < bestGap) {
+          bestGap = d;
+          best = i;
+        }
+      }
+      if (best < 0) return null;
+      const s = sales[best];
+      return { id: best, teaser: false, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "" };
     };
     const releaseHover = () => {
       const current = hovering.current;
