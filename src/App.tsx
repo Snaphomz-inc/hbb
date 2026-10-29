@@ -805,7 +805,16 @@ export function App() {
       {!overview && data && chapter && map && (
         <>
           <Labels map={map} labels={chapter.labels} visible={chapter.kind === "story" && settled} />
-          <Neighbors map={map} index={index} current={slug} onPick={hop} hidden={explore !== "off"} />
+          <Neighbors
+            map={map}
+            index={index}
+            current={slug}
+            onPick={hop}
+            onHold={(held) => {
+              holdDrift.current = held;
+            }}
+            hidden={explore !== "off"}
+          />
 
           <div className={`hero ${chapter.kind === "hero" ? "show" : ""}`}>
             <h1>

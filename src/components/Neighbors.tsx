@@ -29,7 +29,22 @@ function pillWidth(name: string): number {
  * Positions are written straight to the DOM inside the map's move event, like the fact labels, so
  * they keep up with a drag or a wheel zoom; React only renders when a pill's state changes.
  */
-export function Neighbors({ map, index, current, onPick, hidden }: { map: maplibregl.Map; index: IndexEntry[]; current: string; onPick: (slug: string) => void; hidden: boolean }) {
+export function Neighbors({
+  map,
+  index,
+  current,
+  onPick,
+  onHold,
+  hidden,
+}: {
+  map: maplibregl.Map;
+  index: IndexEntry[];
+  current: string;
+  onPick: (slug: string) => void;
+  /** The pointer is over a pill: the camera should hold still so the pill stays under it. */
+  onHold: (held: boolean) => void;
+  hidden: boolean;
+}) {
   const neighbors = useMemo(() => {
     const here = index.find((entry) => entry.slug === current);
     if (!here) return [];
@@ -59,6 +74,9 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
     let signature = "";
     let blocked: Rect[] = [];
     let measuredAt = 0;
+    // Whether each pill sat over its centre last time: a pill near the edge of the view would otherwise
+    // flip between its centre and the edge on every small camera move, which reads as a glitch.
+    const wasNear = new Map<string, boolean>();
     const update = () => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
@@ -88,7 +106,11 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
         const finite = Number.isFinite(point.x) && Number.isFinite(point.y);
         const back = finite ? map.unproject([point.x, point.y]) : null;
         const trusted = back !== null && distanceM([back.lng, back.lat], entry.center) < 400;
-        const near = trusted && point.x > edge.x0 + w / 2 && point.x < edge.x1 - w / 2 && point.y > edge.y0 + HEIGHT && point.y < edge.y1;
+        const inside = (margin: number) =>
+          point.x > edge.x0 + w / 2 + margin && point.x < edge.x1 - w / 2 - margin && point.y > edge.y0 + HEIGHT + margin && point.y < edge.y1 - margin;
+        // Settling over the centre takes a clear margin; leaving it takes stepping well past the edge.
+        const near = trusted && (wasNear.get(entry.slug) ? inside(-10) : inside(28));
+        wasNear.set(entry.slug, near);
         let x: number;
         let y: number;
         let arrow = "";
@@ -149,6 +171,8 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
           className={`neighbor ${pill.near ? "neighbor-near" : ""} ${!hidden && pill.onScreen ? "in" : ""}`}
           style={{ width: pill.w }}
           onClick={() => onPick(pill.slug)}
+          onMouseEnter={() => onHold(true)}
+          onMouseLeave={() => onHold(false)}
           title={`Fly to ${pill.name}`}
         >
           <span className="neighbor-arrow" aria-hidden="true">{pill.near ? "•" : pill.arrow}</span>
