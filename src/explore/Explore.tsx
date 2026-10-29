@@ -13,6 +13,8 @@ export type ViewCamera = {
   bearing: number;
   /** Ground height at the centre, metres, so Google orbits the same point. */
   altitude: number;
+  /** The map's own centre height, metres (terrain units): 0 for the story, the ground under a focused sale. */
+  elevation?: number;
 };
 
 type GoogleCamera = { center: { lat: number; lng: number; altitude: number }; range: number; tilt: number; heading: number };

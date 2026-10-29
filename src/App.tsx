@@ -210,6 +210,9 @@ export function App() {
   // The look-around view (Google 3D) opens on the story's current camera and hands its own back on exit.
   const [explore, setExplore] = useState<"off" | "on" | "closing">("off");
   const resume = useRef<{ from: ViewCamera; at: number; ms?: number } | null>(null);
+  // A flight within free look (down to a focused sale, out toward a neighbour), flown by the loop itself:
+  // MapLibre's easeTo loses the centre height on a terrain map, and the height is the whole point here.
+  const flight = useRef<{ from: ViewCamera; to: ViewCamera; at: number; ms: number } | null>(null);
   const dive = useRef<{ at: number } | null>(null);
   // Free look: a drag, a ctrl + scroll or a two-finger gesture hands the camera to the reader, and the
   // story stops steering it until the next page scroll, Escape or the "back to the tour" chip.
@@ -295,6 +298,18 @@ export function App() {
       // In free look the reader has the camera; keep the clock honest and wait.
       if (free.current || pressed.current) {
         lastNow = now;
+        const trip = flight.current;
+        if (trip && !pressed.current) {
+          const e = smoothstep((now - trip.at) / trip.ms);
+          map.jumpTo({
+            center: [lerp(trip.from.center[0], trip.to.center[0], e), lerp(trip.from.center[1], trip.to.center[1], e)],
+            zoom: lerp(trip.from.zoom, trip.to.zoom, e),
+            pitch: lerp(trip.from.pitch, trip.to.pitch, e),
+            bearing: lerpAngle(trip.from.bearing, trip.to.bearing, e),
+            elevation: lerp(trip.from.elevation ?? 0, trip.to.elevation ?? 0, e),
+          });
+          if (e >= 1) flight.current = null;
+        }
         frame = requestAnimationFrame(tick);
         return;
       }
@@ -320,6 +335,8 @@ export function App() {
         zoom: Math.min(17.5, Math.max(8.5, fit + lerp(a.zoomDelta, b.zoomDelta, t) + breathe)),
         pitch: lerp(a.pitch, b.pitch, t),
         bearing: lerpAngle(a.bearing, b.bearing, t) + drift,
+        // The story looks at sea level under its centre; a focus or look-around may have raised it.
+        elevation: 0,
       };
       // On the way into look-around the camera dives toward the ground and Google picks up where it lands.
       const diving = dive.current;
@@ -338,9 +355,10 @@ export function App() {
         camera.zoom = lerp(back.from.zoom, camera.zoom, e);
         camera.pitch = lerp(back.from.pitch, camera.pitch, e);
         camera.bearing = lerpAngle(back.from.bearing, camera.bearing, e);
+        camera.elevation = lerp(back.from.elevation ?? 0, 0, e);
         if (k >= 1) resume.current = null;
       }
-      const key = `${camera.center[0].toFixed(6)},${camera.center[1].toFixed(6)},${camera.zoom.toFixed(4)},${camera.pitch.toFixed(2)},${camera.bearing.toFixed(2)}`;
+      const key = `${camera.center[0].toFixed(6)},${camera.center[1].toFixed(6)},${camera.zoom.toFixed(4)},${camera.pitch.toFixed(2)},${camera.bearing.toFixed(2)},${camera.elevation.toFixed(1)}`;
       if (key !== lastCamera.current) {
         map.jumpTo(camera);
         lastCamera.current = key;
@@ -377,7 +395,7 @@ export function App() {
     const centre = map!.getCenter();
     const exaggeration = map!.getTerrain()?.exaggeration ?? 1;
     const altitude = (map!.queryTerrainElevation(centre) ?? 0) / exaggeration;
-    return { center: [centre.lng, centre.lat], zoom: map!.getZoom(), pitch: map!.getPitch(), bearing: map!.getBearing(), altitude };
+    return { center: [centre.lng, centre.lat], zoom: map!.getZoom(), pitch: map!.getPitch(), bearing: map!.getBearing(), altitude, elevation: map!.transform.elevation };
   };
   const enterExplore = () => {
     if (!map || !exploreAvailable || explore !== "off" || !mapAlive(map)) return;
@@ -389,11 +407,13 @@ export function App() {
   const exitExplore = (camera: ViewCamera) => {
     if (explore !== "on") return;
     const pitch = Math.min(80, Math.max(0, camera.pitch));
+    // Google orbits the ground under its centre; the map's centre height is the same ground, exaggerated.
+    const elevation = camera.altitude * (map?.getTerrain()?.exaggeration ?? 1);
     if (free.current && map && mapAlive(map)) {
       // Look-around opened on a free camera, so it comes back to one: the map picks up Google's last view as is.
-      map.jumpTo({ center: camera.center, zoom: camera.zoom, pitch, bearing: camera.bearing });
+      map.jumpTo({ center: camera.center, zoom: camera.zoom, pitch, bearing: camera.bearing, elevation });
     } else {
-      resume.current = { from: { ...camera, pitch }, at: performance.now() };
+      resume.current = { from: { ...camera, pitch, elevation }, at: performance.now() };
     }
     dive.current = null;
     setExplore("closing");
@@ -422,6 +442,7 @@ export function App() {
     }
     if (!map || !mapAlive(map)) return;
     map.stop();
+    flight.current = null;
     resume.current = { from: readCamera(), at: performance.now() };
   };
 
@@ -444,7 +465,15 @@ export function App() {
     tipFor.current = -1;
     setSaleTip(null);
     setTeasers([sale]);
-    map.easeTo({ center: [sale.lon, sale.lat], zoom: Math.max(map.getZoom(), 16.6), pitch: 62, bearing: map.getBearing() + 18, duration: 1500, essential: true });
+    // The camera looks at the ground under the house, not at sea level beneath it: on a hillside the
+    // difference is hundreds of metres, and aiming low put the house off screen behind the slope.
+    const ground = map.queryTerrainElevation([sale.lon, sale.lat]) ?? 0;
+    flight.current = {
+      from: readCamera(),
+      to: { center: [sale.lon, sale.lat], zoom: Math.max(map.getZoom(), 16.6), pitch: 62, bearing: map.getBearing() + 18, altitude: 0, elevation: ground },
+      at: performance.now(),
+      ms: 1500,
+    };
   };
 
   /**
@@ -458,7 +487,12 @@ export function App() {
       return;
     }
     enterFree();
-    map.easeTo({ center: entry.center, zoom: Math.max(11, map.getZoom() - 0.9), pitch: Math.min(map.getPitch(), 50), duration: 1100, essential: true });
+    flight.current = {
+      from: readCamera(),
+      to: { center: entry.center, zoom: Math.max(11, map.getZoom() - 0.9), pitch: Math.min(map.getPitch(), 50), bearing: map.getBearing(), altitude: 0, elevation: 0 },
+      at: performance.now(),
+      ms: 1100,
+    };
     window.setTimeout(() => {
       if (mapAlive(map)) arrival = readCamera();
       pick(next);
@@ -667,7 +701,10 @@ export function App() {
     };
     // Any gesture on the map hands the camera over; the next page scroll takes it back.
     const grab = (event: { originalEvent?: unknown }) => {
-      if (event.originalEvent) actions.current.enterFree();
+      if (!event.originalEvent) return;
+      // A hand on the map ends any flight in progress.
+      flight.current = null;
+      actions.current.enterFree();
     };
     const onWheel = (event: WheelEvent) => {
       if (event.ctrlKey || event.metaKey) actions.current.enterFree();
