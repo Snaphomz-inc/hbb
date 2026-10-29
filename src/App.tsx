@@ -355,7 +355,7 @@ export function App() {
 
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
-    showLayers(map, chapters[position.active]?.layers ?? []);
+    showLayers(map, chapters[position.active]?.layers ?? [], chapters[position.active + 1]?.layers ?? []);
   }, [map, chapters, position.active]);
 
   const pick = (next: string) => {
@@ -574,7 +574,19 @@ export function App() {
       }
       enterExploreRef.current();
     };
+    // A mouse reports many positions per frame; the hit test (a rendered-feature query on a terrain
+    // map) runs once per frame on the latest one.
+    let moveFrame = 0;
+    let lastMove: maplibregl.MapMouseEvent | null = null;
     const onMove = (event: maplibregl.MapMouseEvent) => {
+      lastMove = event;
+      if (moveFrame) return;
+      moveFrame = requestAnimationFrame(() => {
+        moveFrame = 0;
+        if (lastMove && mapAlive(map)) hitTest(lastMove);
+      });
+    };
+    const hitTest = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
       holdDrift.current = Boolean(hit);
       map.getCanvas().style.cursor = hit ? "pointer" : "";
@@ -644,6 +656,7 @@ export function App() {
     const warm = window.setTimeout(preloadMaps3d, 2500);
     return () => {
       releaseHover();
+      cancelAnimationFrame(moveFrame);
       if (mapAlive(map)) {
         map.off("click", onClick);
         map.off("mousemove", onMove);

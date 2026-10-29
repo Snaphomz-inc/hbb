@@ -371,17 +371,43 @@ export function mapAlive(map: maplibregl.Map): boolean {
 }
 
 /** Fade data layers in or out. `visible` holds story layer ids; groups expand to their map layers. */
-export function showLayers(map: maplibregl.Map, visible: Iterable<string>): void {
+const hideTimers = new WeakMap<maplibregl.Map, number>();
+
+function expand(ids: Iterable<string>): Set<string> {
+  const out = new Set<string>();
+  for (const id of ids) for (const layer of LAYER_GROUPS[id] ?? [id]) out.add(layer);
+  return out;
+}
+
+/**
+ * Fade the chapter's layers in and everything else out. Once the fade-out has run, the hidden layers
+ * leave the frame altogether: at opacity 0 a draped layer still costs a render pass per tile on a
+ * terrain map, and with twenty of them that was most of each frame (42 ms down to 13 ms measured).
+ * A layer coming back needs its tiles rebuilt (about a quarter of a second), so the next chapter's
+ * layers are kept in the frame, invisible, ready for when the story reaches them.
+ */
+export function showLayers(map: maplibregl.Map, visible: Iterable<string>, next: Iterable<string> = []): void {
   if (!mapAlive(map)) return;
-  const wanted = new Set<string>();
-  for (const id of visible) for (const layer of LAYER_GROUPS[id] ?? [id]) wanted.add(layer);
+  const wanted = expand(visible);
+  const kept = new Set([...wanted, ...expand(next)]);
   for (const [id, target] of Object.entries(TARGETS)) {
     if (!map.getLayer(id)) continue;
     const on = wanted.has(id);
+    if (kept.has(id) && map.getLayoutProperty(id, "visibility") === "none") map.setLayoutProperty(id, "visibility", "visible");
     for (const [property, value] of Object.entries(target)) {
       map.setPaintProperty(id, property, on ? (value as never) : 0);
     }
   }
+  window.clearTimeout(hideTimers.get(map));
+  hideTimers.set(
+    map,
+    window.setTimeout(() => {
+      if (!mapAlive(map)) return;
+      for (const id of Object.keys(TARGETS)) {
+        if (!kept.has(id) && map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none") map.setLayoutProperty(id, "visibility", "none");
+      }
+    }, TRANSITION.duration + 100),
+  );
 }
 
 export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map: maplibregl.Map | null) => void }) {
