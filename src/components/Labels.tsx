@@ -1,10 +1,9 @@
 import type maplibregl from "maplibre-gl";
-import { useEffect, useState } from "react";
-import { flushSync } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { screenPoint } from "../map/MapScene";
 import type { Label } from "../story/chapters";
 
-type Placed = Label & { x: number; y: number; lift: number; onScreen: boolean; flip: boolean; shift: number };
+type Placed = Label & { lift: number; onScreen: boolean; flip: boolean; shift: number };
 
 const CARD_HEIGHT = 46;
 const STEM = 34;
@@ -23,32 +22,53 @@ function overlaps(a: Rect, b: Rect): boolean {
 
 /**
  * Floating fact labels pinned to map coordinates with a leader line, like the
- * callouts in the Ageospatial flyover. Positions follow the camera every frame;
- * a label whose card would cover another one is lifted on a longer stem, and
- * labels that land under the headline or the stat panel are hidden.
+ * callouts in the Ageospatial flyover. A label whose card would cover another one
+ * is lifted on a longer stem, and labels that land under the headline or the stat
+ * panel are hidden.
+ *
+ * Positions are written straight to the DOM inside the map's move event, the way
+ * MapLibre's own markers do it, so they never fall behind a drag or a wheel zoom.
+ * React only renders when something other than a position changes.
  */
 export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: Label[]; visible: boolean }) {
   const [placed, setPlaced] = useState<Placed[]>([]);
+  const nodes = useRef(new Map<string, HTMLElement>());
+  const positions = useRef(new Map<string, { x: number; y: number }>());
+
+  const applyPositions = () => {
+    for (const [id, at] of positions.current) {
+      const node = nodes.current.get(id);
+      if (node) node.style.transform = `translate(${at.x}px, ${at.y}px)`;
+    }
+  };
+  // Nodes that have just mounted take their position before the frame paints.
+  useLayoutEffect(applyPositions);
 
   useEffect(() => {
-    let frame = 0;
-    const update = (sync: boolean) => {
+    let signature = "";
+    let blocked: Rect[] = [];
+    let measuredAt = 0;
+    const update = () => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const wide = width > 900;
       // Screen areas the fixed text sits on: the headline block (measured, since the legend and
-      // timeline change its height) and the stat column.
-      const textBottom = (document.querySelector(".story.show .story-left")?.getBoundingClientRect().bottom ?? 0) + 8;
-      const blocked: Rect[] = wide
-        ? [
-            { x0: 0, y0: 0, x1: 600, y1: Math.max(250, textBottom) },
-            { x0: width - 400, y0: 0, x1: width, y1: height * 0.75 },
-          ]
-        : [
-            { x0: 0, y0: 0, x1: width, y1: Math.max(230, textBottom) },
-            // the stat row and question box sit along the bottom on phones
-            { x0: 0, y0: height - 290, x1: width, y1: height },
-          ];
+      // timeline change its height) and the stat column. Measured a few times a second, not per move.
+      const now = performance.now();
+      if (now - measuredAt > 250) {
+        measuredAt = now;
+        const textBottom = (document.querySelector(".story.show .story-left")?.getBoundingClientRect().bottom ?? 0) + 8;
+        blocked = wide
+          ? [
+              { x0: 0, y0: 0, x1: 600, y1: Math.max(250, textBottom) },
+              { x0: width - 400, y0: 0, x1: width, y1: height * 0.75 },
+            ]
+          : [
+              { x0: 0, y0: 0, x1: width, y1: Math.max(230, textBottom) },
+              // the stat row and question box sit along the bottom on phones
+              { x0: 0, y0: height - 290, x1: width, y1: height },
+            ];
+      }
       const taken: Rect[] = [];
       const next: Placed[] = [];
       // A phone's map is a sliver, so only the first few labels (they are listed by importance) get a card.
@@ -78,24 +98,26 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
         const underText = rect ? blocked.some((zone) => overlaps(rect!, zone)) : false;
         const onScreen = inView && !underText && rect !== null && rect.y0 > 60;
         if (onScreen && rect) taken.push(rect);
-        next.push({ ...label, x: point.x, y: point.y, lift, onScreen, flip, shift });
+        positions.current.set(label.id, { x: point.x, y: point.y });
+        next.push({ ...label, lift, onScreen, flip, shift });
       }
-      if (sync) flushSync(() => setPlaced(next));
-      else setPlaced(next);
+      applyPositions();
+      const nextSignature = next.map((l) => `${l.id}:${l.lift}:${l.onScreen ? 1 : 0}:${l.flip ? 1 : 0}:${Math.round(l.shift)}`).join("|");
+      if (nextSignature !== signature) {
+        signature = nextSignature;
+        setPlaced(next);
+      }
     };
-    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
-    // events and the overlays would only catch up once the zoom stops.
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => update(true));
-    };
-    update(false);
-    map.on("move", schedule);
-    map.on("resize", schedule);
+    positions.current.clear();
+    update();
+    map.on("move", update);
+    map.on("resize", update);
+    // The text block fades in and out with the chapters; look again as that settles.
+    const interval = window.setInterval(update, 400);
     return () => {
-      cancelAnimationFrame(frame);
-      map.off("move", schedule);
-      map.off("resize", schedule);
+      window.clearInterval(interval);
+      map.off("move", update);
+      map.off("resize", update);
     };
   }, [map, labels]);
 
@@ -104,9 +126,12 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
       {placed.map((label, index) => (
         <div
           key={label.id}
+          ref={(node) => {
+            if (node) nodes.current.set(label.id, node);
+            else nodes.current.delete(label.id);
+          }}
           className={`label tone-${label.tone ?? "white"} ${label.flip ? "label-flip" : ""} ${visible && label.onScreen ? "in" : ""}`}
           style={{
-            transform: `translate(${label.x}px, ${label.y}px)`,
             transitionDelay: visible ? `${index * 90}ms` : "0ms",
             ["--stem" as string]: `${STEM + label.lift}px`,
             ["--shift" as string]: `${label.shift}px`,

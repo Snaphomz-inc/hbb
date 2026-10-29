@@ -1,6 +1,5 @@
 import type maplibregl from "maplibre-gl";
-import { useEffect, useState, type MutableRefObject } from "react";
-import { flushSync } from "react-dom";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { money } from "../lib/format";
 import { listingUrl } from "../links";
 import { screenPoint } from "../map/MapScene";
@@ -8,7 +7,7 @@ import { screenPoint } from "../map/MapScene";
 /** A sale whose card is shown without a hover, to show that the dots are links. */
 export type Teaser = { id: number; lon: number; lat: number; price: number; beds: number; sqft: number; kind: number; listing: string; address: string };
 
-type Placed = Teaser & { x: number; y: number; onScreen: boolean };
+type Placed = Teaser & { onScreen: boolean };
 
 /** Where each card's dot sits on the page right now, for the map's own hit test. */
 export type TeaserSpots = Array<{ id: number; x: number; y: number }>;
@@ -19,45 +18,59 @@ export function saleKindName(kind: number): string {
 
 /**
  * One or two sale dots carry their listing card from the moment they land, as a hint that every dot
- * opens its listing. They follow the camera every frame like the fact labels, and go away as soon
- * as the pointer finds a different dot, so the hint never competes with the real hover card.
+ * opens its listing. They follow the camera like the fact labels (positions written straight to the
+ * DOM inside the map's move event), and go away as soon as the pointer finds a different dot, so
+ * the hint never competes with the real hover card.
  */
 export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teasers: Teaser[]; spots: MutableRefObject<TeaserSpots> }) {
   const [placed, setPlaced] = useState<Placed[]>([]);
+  const nodes = useRef(new Map<number, HTMLElement>());
+  const positions = useRef(new Map<number, { x: number; y: number }>());
+
+  const applyPositions = () => {
+    for (const [id, at] of positions.current) {
+      const node = nodes.current.get(id);
+      if (node) {
+        node.style.left = `${at.x}px`;
+        node.style.top = `${at.y}px`;
+      }
+    }
+  };
+  useLayoutEffect(applyPositions);
 
   useEffect(() => {
     if (teasers.length === 0) {
       setPlaced([]);
       spots.current = [];
+      positions.current.clear();
       return;
     }
-    let frame = 0;
-    const update = (sync: boolean) => {
+    let signature = "";
+    const update = () => {
       const rect = map.getCanvas().getBoundingClientRect();
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const next = teasers.map((teaser) => {
         const point = screenPoint(map, [teaser.lon, teaser.lat]);
         const onScreen = Number.isFinite(point.x) && Number.isFinite(point.y) && point.x > 90 && point.x < width - 90 && point.y > 120 && point.y < height - 40;
-        return { ...teaser, x: rect.left + point.x, y: rect.top + point.y, onScreen };
+        positions.current.set(teaser.id, { x: rect.left + point.x, y: rect.top + point.y });
+        return { ...teaser, onScreen };
       });
-      spots.current = next.map((t) => ({ id: t.id, x: t.x, y: t.y }));
-      if (sync) flushSync(() => setPlaced(next));
-      else setPlaced(next);
+      spots.current = next.map((t) => ({ id: t.id, ...positions.current.get(t.id)! }));
+      applyPositions();
+      const nextSignature = next.map((t) => `${t.id}:${t.onScreen ? 1 : 0}`).join("|");
+      if (nextSignature !== signature) {
+        signature = nextSignature;
+        setPlaced(next);
+      }
     };
-    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
-    // events and the overlays would only catch up once the zoom stops.
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => update(true));
-    };
-    update(false);
-    map.on("move", schedule);
-    map.on("resize", schedule);
+    positions.current.clear();
+    update();
+    map.on("move", update);
+    map.on("resize", update);
     return () => {
-      cancelAnimationFrame(frame);
-      map.off("move", schedule);
-      map.off("resize", schedule);
+      map.off("move", update);
+      map.off("resize", update);
     };
   }, [map, teasers, spots]);
 
@@ -77,14 +90,17 @@ export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teas
           </>
         );
         const className = `sale-tip is-teaser ${teaser.onScreen ? "show" : ""}`;
-        const style = { left: teaser.x, top: teaser.y };
+        const attach = (node: HTMLElement | null) => {
+          if (node) nodes.current.set(teaser.id, node);
+          else nodes.current.delete(teaser.id);
+        };
         // A focused sale without a listing page still gets its card, just not as a link.
         return teaser.listing ? (
-          <a key={teaser.id} className={className} style={style} href={listingUrl(teaser.listing)} target="_blank" rel="noreferrer" title="Open the listing on Snaphomz">
+          <a key={teaser.id} ref={attach} className={className} href={listingUrl(teaser.listing)} target="_blank" rel="noreferrer" title="Open the listing on Snaphomz">
             {card}
           </a>
         ) : (
-          <div key={teaser.id} className={`${className} no-link`} style={style}>
+          <div key={teaser.id} ref={attach} className={`${className} no-link`}>
             {card}
           </div>
         );

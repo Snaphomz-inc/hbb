@@ -1,11 +1,10 @@
 import type maplibregl from "maplibre-gl";
-import { useEffect, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { distanceM } from "../lib/geo";
 import { phone, screenPoint } from "../map/MapScene";
 import type { IndexEntry } from "../types";
 
-type Placed = { slug: string; name: string; x: number; y: number; w: number; arrow: string; near: boolean; onScreen: boolean };
+type Placed = { slug: string; name: string; w: number; arrow: string; near: boolean; onScreen: boolean };
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 /** Arrow glyphs by screen direction, 45° steps clockwise from "to the right" (screen y points down). */
@@ -24,8 +23,11 @@ function pillWidth(name: string): number {
 /**
  * The neighborhoods next door, pinned to where they lie: over their centre while it is in view,
  * otherwise against the edge of the screen in their direction, the way a game marks what is off
- * screen. They follow the camera every frame, so they stay honest in free look, and a click flies
- * there. Pills that would land on the story's text, or on each other, stay hidden.
+ * screen. A click flies there. Pills that would land on the story's text, or on each other, stay
+ * hidden.
+ *
+ * Positions are written straight to the DOM inside the map's move event, like the fact labels, so
+ * they keep up with a drag or a wheel zoom; React only renders when a pill's state changes.
  */
 export function Neighbors({ map, index, current, onPick, hidden }: { map: maplibregl.Map; index: IndexEntry[]; current: string; onPick: (slug: string) => void; hidden: boolean }) {
   const neighbors = useMemo(() => {
@@ -37,24 +39,42 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
       .slice(0, phone() ? 3 : 6);
   }, [index, current]);
   const [placed, setPlaced] = useState<Placed[]>([]);
+  const nodes = useRef(new Map<string, HTMLElement>());
+  const positions = useRef(new Map<string, { x: number; y: number }>());
+
+  const applyPositions = () => {
+    for (const [slug, at] of positions.current) {
+      const node = nodes.current.get(slug);
+      if (node) node.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
+    }
+  };
+  useLayoutEffect(applyPositions);
 
   useEffect(() => {
     if (neighbors.length === 0) {
       setPlaced([]);
+      positions.current.clear();
       return;
     }
-    let frame = 0;
-    const update = (sync: boolean) => {
+    let signature = "";
+    let blocked: Rect[] = [];
+    let measuredAt = 0;
+    const update = () => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
       const wide = width > 900;
       // Where a pill's centre may sit: inside the edges, under the header, above the bottom chrome.
-      const edge = { x0: PAD, x1: width - PAD, y0: wide ? 84 : 72, y1: height - (wide ? 70 : 110) };
-      // Text on screen right now: the hero, the chapter's headline block and stats, the closing, the question.
-      const blocked: Rect[] = [...document.querySelectorAll(".hero.show > *, .story.show > *, .closing.show > *, .question-wrap.show > *")]
-        .map((element) => element.getBoundingClientRect())
-        .filter((r) => r.width > 0 && r.height > 0)
-        .map((r) => ({ x0: r.left - 6, y0: r.top - 6, x1: r.right + 6, y1: r.bottom + 6 }));
+      const edge = { x0: PAD, x1: width - PAD, y0: wide ? 84 : 72, y1: height - (wide ? 76 : 110) };
+      // Text on screen right now: the hero, the chapter's headline block and stats, the closing, the
+      // question. Measured a few times a second, not on every move.
+      const now = performance.now();
+      if (now - measuredAt > 250) {
+        measuredAt = now;
+        blocked = [...document.querySelectorAll(".hero.show > *, .story.show > *, .closing.show > *, .question-wrap.show > *")]
+          .map((element) => element.getBoundingClientRect())
+          .filter((r) => r.width > 0 && r.height > 0)
+          .map((r) => ({ x0: r.left - 6, y0: r.top - 6, x1: r.right + 6, y1: r.bottom + 6 }));
+      }
       const centre = map.getCenter();
       const bearing = (map.getBearing() * Math.PI) / 180;
       const cx = width / 2;
@@ -93,27 +113,26 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
         const rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
         const onScreen = !blocked.some((zone) => overlaps(rect, zone)) && !taken.some((other) => overlaps(rect, other));
         if (onScreen) taken.push(rect);
-        return { slug: entry.slug, name: entry.name, x, y, w, arrow, near, onScreen };
+        positions.current.set(entry.slug, { x, y });
+        return { slug: entry.slug, name: entry.name, w, arrow, near, onScreen };
       });
-      if (sync) flushSync(() => setPlaced(next));
-      else setPlaced(next);
+      applyPositions();
+      const nextSignature = next.map((p) => `${p.slug}:${p.arrow}:${p.near ? 1 : 0}:${p.onScreen ? 1 : 0}`).join("|");
+      if (nextSignature !== signature) {
+        signature = nextSignature;
+        setPlaced(next);
+      }
     };
-    // Positions are committed inside the frame: left to the scheduler, React yields to a stream of wheel
-    // events and the overlays would only catch up once the zoom stops.
-    const schedule = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => update(true));
-    };
-    update(false);
-    map.on("move", schedule);
-    map.on("resize", schedule);
+    positions.current.clear();
+    update();
+    map.on("move", update);
+    map.on("resize", update);
     // The text blocks fade in and out with the chapters; look again as that settles.
-    const interval = window.setInterval(schedule, 400);
+    const interval = window.setInterval(update, 400);
     return () => {
-      cancelAnimationFrame(frame);
       window.clearInterval(interval);
-      map.off("move", schedule);
-      map.off("resize", schedule);
+      map.off("move", update);
+      map.off("resize", update);
     };
   }, [map, neighbors]);
 
@@ -122,9 +141,13 @@ export function Neighbors({ map, index, current, onPick, hidden }: { map: maplib
       {placed.map((pill) => (
         <button
           key={pill.slug}
+          ref={(node) => {
+            if (node) nodes.current.set(pill.slug, node);
+            else nodes.current.delete(pill.slug);
+          }}
           type="button"
           className={`neighbor ${pill.near ? "neighbor-near" : ""} ${!hidden && pill.onScreen ? "in" : ""}`}
-          style={{ transform: `translate(${Math.round(pill.x)}px, ${Math.round(pill.y)}px)`, width: pill.w }}
+          style={{ width: pill.w }}
           onClick={() => onPick(pill.slug)}
           title={`Fly to ${pill.name}`}
         >
