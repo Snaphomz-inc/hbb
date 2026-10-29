@@ -12,5 +12,9 @@ export type City = {
 };
 
 declare const __CITY__: City;
+declare const __BUILD__: string;
+
+/** Commit and time of this build; on the <html> element as data-build and printed once in the console. */
+export const build: string = __BUILD__;
 
 export const city: City = __CITY__;

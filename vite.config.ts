@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +30,17 @@ function loadCity(slug: string): CityConfig {
   return JSON.parse(fs.readFileSync(file, "utf-8")) as CityConfig;
 }
 
+/** The commit a build came from, stamped on the page so anyone can tell which build they are looking at. */
+function buildStamp(): string {
+  try {
+    const hash = execSync("git rev-parse --short HEAD", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    const dirty = execSync("git status --porcelain", { cwd: ROOT, stdio: ["ignore", "pipe", "ignore"] }).toString().trim() !== "";
+    return `${hash}${dirty ? "+" : ""} ${new Date().toISOString().slice(0, 16).replace("T", " ")}`;
+  } catch {
+    return new Date().toISOString().slice(0, 16).replace("T", " ");
+  }
+}
+
 function cityPlugin(slug: string): Plugin {
   const city = loadCity(slug);
   const dataDir = path.join(ROOT, "cities", slug, "data");
@@ -37,7 +49,7 @@ function cityPlugin(slug: string): Plugin {
   let outDir = "dist";
   return {
     name: "snaphomz-city",
-    config: () => ({ define: { __CITY__: JSON.stringify(publicCity) } }),
+    config: () => ({ define: { __CITY__: JSON.stringify(publicCity), __BUILD__: JSON.stringify(buildStamp()) } }),
     configResolved(config) {
       base = config.base;
       outDir = config.build.outDir;
