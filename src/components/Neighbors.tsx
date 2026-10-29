@@ -101,19 +101,30 @@ export function Neighbors({
       const next: Placed[] = neighbors.map((entry) => {
         const w = pillWidth(entry.name);
         const point = screenPoint(map, entry.center);
-        // The projection is only trusted where it lands back on the same ground: a point behind the
-        // camera, or past the horizon on a steep pitch, projects somewhere meaningless.
         const finite = Number.isFinite(point.x) && Number.isFinite(point.y);
-        const back = finite ? map.unproject([point.x, point.y]) : null;
-        const trusted = back !== null && distanceM([back.lng, back.lat], entry.center) < 400;
         const inside = (margin: number) =>
-          point.x > edge.x0 + w / 2 + margin && point.x < edge.x1 - w / 2 - margin && point.y > edge.y0 + HEIGHT + margin && point.y < edge.y1 - margin;
-        // Settling over the centre takes a clear margin; leaving it takes stepping well past the edge.
-        const near = trusted && (wasNear.get(entry.slug) ? inside(-10) : inside(28));
+          finite && point.x > edge.x0 + w / 2 + margin && point.x < edge.x1 - w / 2 - margin && point.y > edge.y0 + HEIGHT + margin && point.y < edge.y1 - margin;
+        // A pill settles over its centre only where the projection is trustworthy: a point behind the
+        // camera, or past the horizon on a steep pitch, projects somewhere meaningless. The check
+        // projects and unprojects through the same live terrain, so it does not flicker as tiles load.
+        // Settling takes a clear margin inside the view; once settled, a pill stays while its point is
+        // inside, and only leaves by stepping well past the edge.
+        let near: boolean;
+        if (wasNear.get(entry.slug)) {
+          near = inside(-10);
+        } else {
+          const flat = map.project(entry.center);
+          const back = Number.isFinite(flat.x) && Number.isFinite(flat.y) ? map.unproject([flat.x, flat.y]) : null;
+          const trusted = back !== null && distanceM([back.lng, back.lat], entry.center) < 400;
+          near = trusted && inside(28);
+        }
         wasNear.set(entry.slug, near);
         let x: number;
         let y: number;
         let arrow = "";
+        // Along which axis an edge pill may slide to clear another pill: x along the top and bottom
+        // edges, y along the sides; a pill over its centre does not slide.
+        let slide: "x" | "y" | null = null;
         if (near) {
           x = point.x - w / 2;
           y = point.y - HEIGHT - 10;
@@ -129,10 +140,36 @@ export function Neighbors({
           const t = Math.max(0, Math.min(tx, ty));
           x = cx + dx * t - w / 2;
           y = cy + dy * t - HEIGHT / 2;
+          slide = tx < ty ? "y" : "x";
           const angle = Math.atan2(dy, dx);
           arrow = ARROWS[((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8];
         }
-        const rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
+        // Small moves are eased (half way per update) so a terrain tile arriving under a point, which
+        // shifts its projection a little, does not read as a twitch; a real change of place still snaps.
+        const prev = positions.current.get(entry.slug);
+        if (prev && Math.hypot(x - prev.x, y - prev.y) < 150) {
+          x = prev.x + (x - prev.x) * 0.5;
+          y = prev.y + (y - prev.y) * 0.5;
+        }
+        let rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
+        // Two neighbours in nearly the same direction land on the same edge spot; the later one slides
+        // along the edge past the other rather than blinking in and out as the camera drifts.
+        if (slide) {
+          for (let attempt = 0; attempt < 4; attempt += 1) {
+            const other = taken.find((o) => overlaps(rect, o)) ?? blocked.find((o) => overlaps(rect, o));
+            if (!other) break;
+            if (slide === "x") {
+              const away = x + w / 2 < (other.x0 + other.x1) / 2 ? -1 : 1;
+              x = away < 0 ? other.x0 - w - 8 : other.x1 + 8;
+              x = Math.min(Math.max(x, edge.x0), edge.x1 - w);
+            } else {
+              const away = y + HEIGHT / 2 < (other.y0 + other.y1) / 2 ? -1 : 1;
+              y = away < 0 ? other.y0 - HEIGHT - 8 : other.y1 + 8;
+              y = Math.min(Math.max(y, edge.y0), edge.y1 - HEIGHT);
+            }
+            rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
+          }
+        }
         const onScreen = !blocked.some((zone) => overlaps(rect, zone)) && !taken.some((other) => overlaps(rect, other));
         if (onScreen) taken.push(rect);
         positions.current.set(entry.slug, { x, y });
