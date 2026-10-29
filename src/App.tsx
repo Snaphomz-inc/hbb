@@ -275,7 +275,8 @@ export function App() {
 
   // Drive the camera from the scroll position, every frame, with a slow drift so the view never sits still
   // while someone is looking. Once the page has been left alone for a while the drift eases to rest, and a
-  // resting camera means the map draws nothing at all; the first scroll or pointer movement wakes it.
+  // resting camera means the map draws nothing at all. A scroll, click, key or touch wakes it; moving the
+  // mouse alone does not, so nothing slides away from under the pointer.
   useEffect(() => {
     if (!map || !data || chapters.length === 0) return;
     let frame = 0;
@@ -287,7 +288,7 @@ export function App() {
     const wake = () => {
       lastActivity = performance.now();
     };
-    const wakeEvents = ["scroll", "wheel", "pointermove", "pointerdown", "touchstart", "keydown"] as const;
+    const wakeEvents = ["scroll", "wheel", "pointerdown", "touchstart", "keydown"] as const;
     for (const event of wakeEvents) window.addEventListener(event, wake, { passive: true });
     const widthDegrees = data.bounds[1][0] - data.bounds[0][0];
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -308,10 +309,12 @@ export function App() {
       const fit = zoomToFit(widthDegrees, map.getContainer().clientWidth, 0.8);
       const dt = lastNow ? now - lastNow : 0;
       lastNow = now;
-      // Eases out over 1.5 s once idle, and back up within a third of a second of any activity.
+      // The drift eases to rest once the page has been left alone, and quickly while the pointer rests on
+      // a dot or a pill; a hard stop there made the whole map jerk with every dot the pointer crossed.
       const idle = now - lastActivity > IDLE_MS;
-      pace = Math.min(1, Math.max(0, pace + (idle ? -dt / 1500 : dt / 350)));
-      if (!holdDrift.current) driftNow += dt * pace;
+      const hold = holdDrift.current;
+      pace = Math.min(1, Math.max(0, pace + (hold ? -dt / 300 : idle ? -dt / 1500 : dt / 800)));
+      driftNow += dt * pace;
       const drift = still ? 0 : Math.sin(driftNow / 9000) * 2.2;
       const breathe = still ? 0 : Math.sin(driftNow / 13000) * 0.04;
       const camera = {
