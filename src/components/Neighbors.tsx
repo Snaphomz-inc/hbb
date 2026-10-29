@@ -59,7 +59,8 @@ export function Neighbors({
   const applyPositions = () => {
     for (const [slug, at] of positions.current) {
       const node = nodes.current.get(slug);
-      if (node) node.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
+      // Sub-pixel positions: rounded to whole pixels the pills tick along in 1 px steps under the slow drift.
+      if (node) node.style.transform = `translate(${at.x.toFixed(2)}px, ${at.y.toFixed(2)}px)`;
     }
   };
   useLayoutEffect(applyPositions);

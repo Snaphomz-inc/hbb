@@ -327,6 +327,7 @@ select {
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
+  will-change: transform;
   transition: opacity 300ms ease, border-color 200ms, color 200ms;
 }
 
