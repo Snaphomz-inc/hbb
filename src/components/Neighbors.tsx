@@ -54,6 +54,7 @@ export function Neighbors({
   const [placed, setPlaced] = useState<Placed[]>([]);
   const nodes = useRef(new Map<string, HTMLElement>());
   const positions = useRef(new Map<string, { x: number; y: number }>());
+  const container = useRef<HTMLDivElement>(null);
 
   const applyPositions = () => {
     for (const [slug, at] of positions.current) {
@@ -72,6 +73,10 @@ export function Neighbors({
     let signature = "";
     let blocked: Rect[] = [];
     let measuredAt = 0;
+    // How fast the camera is moving between updates. Under the slow idle drift, a pill's discrete
+    // changes of place (sliding past another, leaving its centre for the edge) glide over a short
+    // transition; under a drag, a zoom or a chapter flight the pills follow the map exactly.
+    let lastCamera: { lng: number; lat: number; zoom: number; bearing: number; pitch: number } | null = null;
     // Whether each pill sat over its centre last time: a pill near the edge of the view would otherwise
     // flip between its centre and the edge on every small camera move, which reads as a glitch.
     const wasNear = new Map<string, boolean>();
@@ -98,6 +103,19 @@ export function Neighbors({
       }
       const centre = map.getCenter();
       const bearing = (map.getBearing() * Math.PI) / 180;
+      const cam = { lng: centre.lng, lat: centre.lat, zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() };
+      if (container.current) {
+        const prev = lastCamera;
+        const slow =
+          prev !== null &&
+          Math.abs(cam.bearing - prev.bearing) < 0.06 &&
+          Math.abs(cam.zoom - prev.zoom) < 0.003 &&
+          Math.abs(cam.pitch - prev.pitch) < 0.06 &&
+          // degrees to screen pixels at this zoom: 512 px per 360° at zoom 0, doubling per level
+          Math.hypot(cam.lng - prev.lng, cam.lat - prev.lat) * (512 / 360) * 2 ** cam.zoom < 2;
+        container.current.dataset.motion = slow ? "slow" : "fast";
+      }
+      lastCamera = cam;
       const cx = width / 2;
       const cy = height / 2;
       const taken: Rect[] = [];
@@ -214,7 +232,7 @@ export function Neighbors({
   }, [map, neighbors]);
 
   return (
-    <div className="neighbors" aria-hidden={hidden}>
+    <div ref={container} className="neighbors" aria-hidden={hidden}>
       {placed.map((pill) => (
         <button
           key={pill.slug}

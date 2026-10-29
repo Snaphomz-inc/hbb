@@ -335,6 +335,11 @@ select {
   pointer-events: auto;
 }
 
+/* Under the slow idle drift a pill's change of place glides; under a drag or zoom it follows exactly. */
+.neighbors[data-motion="slow"] .neighbor {
+  transition: transform 450ms ease, opacity 300ms ease, border-color 200ms, color 200ms;
+}
+
 .neighbor:hover {
   border-color: var(--lime);
   color: #fff;
