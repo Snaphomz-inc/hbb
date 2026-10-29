@@ -428,6 +428,11 @@ export function MapScene({ data, onReady }: { data: Neighborhood; onReady: (map:
       pitch: 55,
       bearing: data.camera.bearing ?? 30,
       maxPitch: 80,
+      // The camera centre is not glued to the terrain surface: MapLibre reads the ground height there
+      // only while the camera rests, and our loop drives it every frame, so the height flipped between
+      // the terrain's value and zero whenever the drift started or stopped, which shifted the whole
+      // scene by tens of pixels each time. Left alone, it stays at zero and nothing jumps.
+      centerClampedToGround: false,
       minZoom: 8,
       maxZoom: 18.5,
       // Free look: a drag pans, ctrl + scroll zooms, two fingers on a phone; plain scrolling stays with the
