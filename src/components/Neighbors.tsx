@@ -78,6 +78,11 @@ export function Neighbors({
     // Whether each pill sat over its centre last time: a pill near the edge of the view would otherwise
     // flip between its centre and the edge on every small camera move, which reads as a glitch.
     const wasNear = new Map<string, boolean>();
+    // The arrow's direction sector and the pill's visibility only change once they have clearly
+    // changed: at a 45° boundary the glyph would otherwise alternate with every small camera move,
+    // and a pill on the border of a text block would blink.
+    const sectors = new Map<string, number>();
+    const shownState = new Map<string, { on: boolean; since: number; pending: number }>();
     const update = () => {
       const width = map.getContainer().clientWidth;
       const height = map.getContainer().clientHeight;
@@ -145,7 +150,13 @@ export function Neighbors({
           y = cy + dy * t - HEIGHT / 2;
           slide = tx < ty ? "y" : "x";
           const angle = Math.atan2(dy, dx);
-          arrow = ARROWS[((Math.round(angle / (Math.PI / 4)) % 8) + 8) % 8];
+          const exact = angle / (Math.PI / 4);
+          const last = sectors.get(entry.slug);
+          let sector = Math.round(exact);
+          // Stay in the last sector until the direction is well past its edge (6° of hysteresis).
+          if (last !== undefined && sector !== last && Math.abs(exact - last) < 0.5 + 6 / 45) sector = last;
+          sectors.set(entry.slug, sector);
+          arrow = ARROWS[((sector % 8) + 8) % 8];
         }
         let rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
         // Two neighbours in nearly the same direction land on the same edge spot; the later one slides
@@ -166,7 +177,21 @@ export function Neighbors({
             rect = { x0: x, y0: y, x1: x + w, y1: y + HEIGHT };
           }
         }
-        const onScreen = !blocked.some((zone) => overlaps(rect, zone)) && !taken.some((other) => overlaps(rect, other));
+        const clear = !blocked.some((zone) => overlaps(rect, zone)) && !taken.some((other) => overlaps(rect, other));
+        // Visibility follows the clear/blocked state only after it has held for a few updates and at
+        // least 600 ms since the last change.
+        const shown = shownState.get(entry.slug) ?? { on: clear, since: now, pending: 0 };
+        if (clear === shown.on) shown.pending = 0;
+        else {
+          shown.pending += 1;
+          if (shown.pending >= 3 && now - shown.since > 600) {
+            shown.on = clear;
+            shown.since = now;
+            shown.pending = 0;
+          }
+        }
+        shownState.set(entry.slug, shown);
+        const onScreen = shown.on;
         if (onScreen) taken.push(rect);
         positions.current.set(entry.slug, { x, y });
         return { slug: entry.slug, name: entry.name, w, arrow, near, onScreen };

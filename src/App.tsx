@@ -1,4 +1,5 @@
 import type maplibregl from "maplibre-gl";
+import { LngLat } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
 import { Neighbors } from "./components/Neighbors";
@@ -221,7 +222,11 @@ export function App() {
   // The sale a click flew down to; its card stays pinned until free look ends.
   const focused = useRef<number | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
-  const [saleTip, setSaleTip] = useState<{ x: number; y: number; price: number; beds: number; sqft: number; kind: number; address: string } | null>(null);
+  const [saleTip, setSaleTip] = useState<{ price: number; beds: number; sqft: number; kind: number; address: string } | null>(null);
+  // The card's place follows the pointer straight through the DOM; React only renders when the dot changes.
+  const tipNode = useRef<HTMLDivElement>(null);
+  const tipAt = useRef({ x: 0, y: 0 });
+  const tipFor = useRef(-1);
   // While the pointer rests on a dot the camera drift pauses, so the dot stays under the cursor.
   const holdDrift = useRef(false);
   // A couple of dots show their card unprompted once they land, so the link is discoverable; the
@@ -435,6 +440,7 @@ export function App() {
     enterFree();
     focused.current = sale.id;
     teasersCleared.current = true;
+    tipFor.current = -1;
     setSaleTip(null);
     setTeasers([sale]);
     map.easeTo({ center: [sale.lon, sale.lat], zoom: Math.max(map.getZoom(), 16.6), pitch: 62, bearing: map.getBearing() + 18, duration: 1500, essential: true });
@@ -512,38 +518,52 @@ export function App() {
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
     type SaleHit = Teaser & { teaser: boolean };
+    // Screen positions of every sale, projected once per camera position rather than per mouse move,
+    // with a remembered ground height per sale (the DEM read is the slow part, and it also drops to sea
+    // level for a frame at tile edges), so a sweep across the dots costs next to nothing.
+    const sales = dataRef.current?.sales ?? [];
+    const lngLats = sales.map((s) => new LngLat(s[0], s[1]));
+    const heights = new Float64Array(sales.length);
+    const screen = new Float64Array(sales.length * 2);
+    let cameraVersion = 0;
+    let projectedFor = -1;
+    const bump = () => {
+      cameraVersion += 1;
+    };
+    let height = 0;
+    type FakeTerrain = NonNullable<Parameters<typeof map.transform.locationToScreenPoint>[1]>;
+    const fixed = { getElevationForLngLat: () => height, getElevationForLngLatZoom: () => height } as unknown as FakeTerrain;
+    const projectAll = () => {
+      if (projectedFor === cameraVersion) return;
+      projectedFor = cameraVersion;
+      const terrain = map.getTerrain();
+      for (let i = 0; i < sales.length; i += 1) {
+        if (terrain && heights[i] === 0) heights[i] = map.queryTerrainElevation(lngLats[i]) ?? 0;
+        height = heights[i];
+        const p = map.transform.locationToScreenPoint(lngLats[i], terrain ? fixed : undefined);
+        screen[i * 2] = p.x;
+        screen[i * 2 + 1] = p.y;
+      }
+    };
     const saleAt = (point: maplibregl.Point): SaleHit | null => {
       // Dots exist in every chapter but are only drawn in the ones that list the layer, and only once the timeline has reached them.
       if (!chapterRef.current?.layers.includes("sales") || !map.getLayer("sales")) return null;
-      const gap = (lngLat: [number, number]) => {
-        const at = screenPoint(map, lngLat);
-        return Math.hypot(at.x - point.x, at.y - point.y);
-      };
       // A dot carrying a card is matched where its card is drawn, so it is never lost among its neighbours.
       const rect = map.getCanvas().getBoundingClientRect();
       const spot = teaserSpots.current.find((s) => Math.hypot(s.x - rect.left - point.x, s.y - rect.top - point.y) <= 12);
       const teaser = spot && teasersRef.current.find((t) => t.id === spot.id);
       if (teaser) return { ...teaser, teaser: true };
-      // The dots are matched on the CPU. A rendered-feature query on a terrain map reads a pixel back from
-      // the GPU, which stalls the frame and showed as a hitch whenever the pointer crossed a dot. The ground
-      // under the pointer (flat, no terrain) narrows the search to the sales within a generous reach.
-      const sales = dataRef.current?.sales ?? [];
+      // The dots are matched on the CPU: a rendered-feature query on a terrain map reads a pixel back from
+      // the GPU, which stalls the frame and showed as a hitch whenever the pointer crossed a dot.
       const on = salesOn(map);
       if (!on) return null;
-      const approx = map.transform.screenPointToLocation(point);
-      const metresPerPixel = (156543.03 * Math.cos((approx.lat * Math.PI) / 180)) / 2 ** map.getZoom();
-      const reach = metresPerPixel * 500;
-      const dLat = reach / 111_320;
-      const dLon = reach / (111_320 * Math.cos((approx.lat * Math.PI) / 180));
+      projectAll();
       const pad = 9;
       let best = -1;
       let bestGap = pad;
       for (let i = 0; i < sales.length; i += 1) {
         if (!on[i]) continue;
-        const lon = sales[i][0];
-        const lat = sales[i][1];
-        if (Math.abs(lon - approx.lng) > dLon || Math.abs(lat - approx.lat) > dLat) continue;
-        const d = gap([lon, lat]);
+        const d = Math.hypot(screen[i * 2] - point.x, screen[i * 2 + 1] - point.y);
         // Where dots crowd, the one nearest the pointer wins.
         if (d < bestGap) {
           bestGap = d;
@@ -606,19 +626,23 @@ export function App() {
         if (lastMove && mapAlive(map)) hitTest(lastMove);
       });
     };
+    const clearTip = () => {
+      tipFor.current = -1;
+      setSaleTip((tip) => (tip ? null : tip));
+    };
     const hitTest = (event: maplibregl.MapMouseEvent) => {
       const hit = saleAt(event.point);
       holdDrift.current = Boolean(hit);
       map.getCanvas().style.cursor = hit ? "pointer" : "";
       if (!hit) {
         releaseHover();
-        setSaleTip((tip) => (tip ? null : tip));
+        clearTip();
         return;
       }
       holdSaleHover(hit.id);
       // A teaser dot already shows its card; any other dot takes the teasers down for good.
       if (hit.teaser) {
-        setSaleTip((tip) => (tip ? null : tip));
+        clearTip();
         return;
       }
       if (teasersRef.current.some((t) => t.id !== focused.current)) {
@@ -626,13 +650,21 @@ export function App() {
         setTeasers((current) => current.filter((t) => t.id === focused.current));
       }
       const rect = map.getCanvas().getBoundingClientRect();
-      setSaleTip({ x: rect.left + event.point.x, y: rect.top + event.point.y, price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address });
+      tipAt.current = { x: rect.left + event.point.x, y: rect.top + event.point.y };
+      if (tipNode.current) {
+        tipNode.current.style.left = `${tipAt.current.x}px`;
+        tipNode.current.style.top = `${tipAt.current.y}px`;
+      }
+      if (tipFor.current !== hit.id) {
+        tipFor.current = hit.id;
+        setSaleTip({ price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address });
+      }
     };
     const onLeave = () => {
       holdDrift.current = false;
       releaseHover();
       map.getCanvas().style.cursor = "";
-      setSaleTip(null);
+      clearTip();
     };
     // Any gesture on the map hands the camera over; the next page scroll takes it back.
     const grab = (event: { originalEvent?: unknown }) => {
@@ -654,9 +686,10 @@ export function App() {
     };
     // The hover card sits where the pointer was; once the map slides under a still pointer it is stale.
     const onMapMove = () => {
+      bump();
       if (!free.current) return;
       releaseHover();
-      setSaleTip((tip) => (tip ? null : tip));
+      clearTip();
     };
     const gestures = ["dragstart", "zoomstart", "rotatestart", "pitchstart"] as const;
     const canvas = map.getCanvas();
@@ -724,6 +757,7 @@ export function App() {
   useEffect(() => {
     if (!map || !mapAlive(map)) return;
     // The pointer has not moved, but the map under it has.
+    tipFor.current = -1;
     setSaleTip(null);
     if (!playback) {
       setSalesClock(map, null);
@@ -925,7 +959,7 @@ export function App() {
           </div>
 
           {saleTip && (
-            <div className="sale-tip" style={{ left: saleTip.x, top: saleTip.y }} role="tooltip">
+            <div ref={tipNode} className="sale-tip" style={{ left: tipAt.current.x, top: tipAt.current.y }} role="tooltip">
               <div className="sale-tip-price">{money(saleTip.price)}</div>
               {saleTip.address && <div className="sale-tip-address">{saleTip.address}</div>}
               <div className="sale-tip-meta">
