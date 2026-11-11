@@ -968,28 +968,6 @@ export function App() {
           <div className={`scroll-hint ${position.overall < 0.97 && !freeLook ? "show" : ""}`}>
             scroll <span className="arrow">↓</span>
           </div>
-          <nav className="progress" aria-label="Chapters">
-            {chapters.map((c, i) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`progress-seg ${i === position.active ? "is-on" : ""}`}
-                onClick={() => goToChapter(i)}
-                title={chapterName(c)}
-              >
-                <span className="progress-name">{chapterName(c)}</span>
-                <span className="progress-track">
-                  <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
-                </span>
-              </button>
-            ))}
-          </nav>
-          <button type="button" className={`tour-back ${freeLook && explore === "off" ? "show" : ""}`} onClick={leaveFree}>
-            <span aria-hidden="true">↩</span> back to the tour
-          </button>
-          <div className={`free-hint ${!freeLook && explore === "off" && chapter.kind !== "hero" ? "show" : ""}`} aria-hidden="true">
-            drag to look around · ctrl + scroll zooms
-          </div>
 
           {saleTip && (
             <div ref={tipNode} className="sale-tip" style={{ left: tipAt.current.x, top: tipAt.current.y }} role="tooltip">
@@ -1004,11 +982,36 @@ export function App() {
             </div>
           )}
           {map && mapAlive(map) && teasers.length > 0 && explore === "off" && <SaleTeasers map={map} teasers={teasers} spots={teaserSpots} />}
-          {exploreAvailable && (
-            <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
-              <span className="look-around-icon" aria-hidden="true">⤢</span>look around
+          {/* The bottom-right dock: free-look controls, look-around and the chapter rail in one row. */}
+          <div className="dock">
+            <button type="button" className={`tour-back ${freeLook && explore === "off" ? "show" : ""}`} onClick={leaveFree}>
+              <span aria-hidden="true">↩</span> back to the tour
             </button>
-          )}
+            <div className={`free-hint ${!freeLook && explore === "off" && chapter.kind !== "hero" ? "show" : ""}`} aria-hidden="true">
+              drag to look around · ctrl + scroll zooms
+            </div>
+            {exploreAvailable && (
+              <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
+                <span className="look-around-icon" aria-hidden="true">⤢</span>look around
+              </button>
+            )}
+            <nav className="progress" aria-label="Chapters">
+              {chapters.map((c, i) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`progress-seg ${i === position.active ? "is-on" : ""}`}
+                  onClick={() => goToChapter(i)}
+                  title={chapterName(c)}
+                >
+                  <span className="progress-name">{chapterName(c)}</span>
+                  <span className="progress-track">
+                    <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
+                  </span>
+                </button>
+              ))}
+            </nav>
+          </div>
           {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={DIVE_MS} onExit={exitExplore} />}
         </>
       )}
