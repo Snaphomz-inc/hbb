@@ -115,13 +115,16 @@ pointer fills with its colour, its card appears above (status and month, price, 
 listing link), and a click on the chip or the card opens the listing on Snaphomz. A chip's tail sits
 on the mesh, which includes roofs, so close up the hit box grows by a roof's height on screen.
 
-Zoom in past 1.6 km and lot lines appear: the LA County Assessor's parcel polygons (2025 roll) from
-the County's public ArcGIS feature service, fetched for the area around the camera whenever it comes
-to rest and kept as you pan (`src/explore/parcels.ts`). They are thin white lines a metre and a half
-above the mesh; the lot under a hovered home lights in the home's colour. A credit to the Assessor
-sits by Google's logo while any are on screen. Google's `gmp-steadychange` event does not fire for
-every wheel zoom or for a camera set from code, so both the chips and the lot lines refresh from a
-small camera-at-rest watcher of our own (`src/explore/still.ts`).
+Zoom in past 1.6 km and the lots come alive: the LA County Assessor's parcel polygons (2025 roll)
+from the County's public ArcGIS feature service are fetched for the area around the camera whenever
+it comes to rest and kept in memory as you pan (`src/explore/parcels.ts`). Nothing is drawn until
+you point at a lot: its outline goes on in white, a metre and a half above the mesh, and comes off
+when the pointer moves on; a hovered home's lot is outlined in the home's colour. Drawing every lot
+read as white streaks across the view, so only one is ever on. Finding the lot under the pointer is
+a ray through the pixel marched out until it drops below the terrain model. A credit to the
+Assessor sits by Google's logo while lots are loaded. Google's `gmp-steadychange` event does not
+fire for every wheel zoom or for a camera set from code, so both the chips and the lots refresh
+from a small camera-at-rest watcher of our own (`src/explore/still.ts`).
 
 ## Cities
 

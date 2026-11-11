@@ -1,41 +1,39 @@
 /**
- * Lot lines on Google's mesh: the LA County Assessor's parcel polygons (the 2025 roll, from the
- * County's public ArcGIS feature service), drawn as thin white outlines a metre and a half above
- * the mesh so they drape over roofs and gardens. They only appear once the camera is close enough
- * for a lot to be more than a few pixels (RANGE_MAX); further out they would be noise and
- * thousands of elements. Whenever the camera comes to rest the parcels within reach of its centre
- * are fetched (one request, up to the service's 2000 per call) and the ones already on the map are
- * kept, so panning along a street fills in as you go. The parcel under a hovered home is lit in
- * the home's colour.
+ * Lot lines on Google's mesh, one lot at a time: the LA County Assessor's parcel polygons (the 2025
+ * roll, from the County's public ArcGIS feature service). The parcels around the camera are fetched
+ * whenever it comes to rest close enough for a lot to be more than a few pixels (PARCEL_RANGE_MAX)
+ * and kept in memory as you pan, but nothing is drawn until a lot is pointed at: then its outline
+ * goes on as lines a metre and a half above the mesh, so they drape over the roof and garden, and
+ * comes off again when the pointer moves on. Drawing every lot at once read as white streaks all
+ * over the view.
  */
+
+import { watchStill } from "./still";
 
 type Map3D = HTMLElement & { center: { lat: number; lng: number; altitude: number } | null; range: number; tilt: number; heading: number };
 type Polyline = HTMLElement & { strokeColor: string; strokeWidth: number };
 /** [lon, lat] vertices; the first ring of a polygon is its outline, the rest are holes. */
 type Ring = number[][];
-type Parcel = { ain: string; polygons: Ring[][]; lines: Polyline[]; lon: number; lat: number };
+type Parcel = { ain: string; polygons: Ring[][]; lon: number; lat: number };
 
 export type ParcelLayer = {
-  /** Light the parcel under a point in a colour, or none. */
+  /** Outline the lot under a point in a colour, or none. */
   highlight(at: { lon: number; lat: number } | null, colour?: string): void;
   destroy(): void;
 };
 
 const SERVICE = "https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/ASSR_PARCELS_25_View/FeatureServer/0/query";
-export const PARCEL_CREDIT = "Lot lines · LA County Assessor";
-/** Camera distance (metres) beyond which no lot lines are drawn. */
+export const PARCEL_CREDIT = "Hover a lot for its lines · LA County Assessor";
+/** Camera distance (metres) beyond which lots are not fetched or drawn. */
 export const PARCEL_RANGE_MAX = 1600;
 /** How far around the camera's centre parcels are fetched, metres: about what the view covers. */
 const REACH_MIN = 250;
 const REACH_MAX = 900;
-/** Parcels kept on the map at once; past KEEP the farthest from the camera go until TRIM_TO remain. */
-const KEEP = 1400;
-const TRIM_TO = 1000;
+/** Parcels kept in memory at once; past KEEP the farthest from the camera go until TRIM_TO remain. */
+const KEEP = 2400;
+const TRIM_TO = 1800;
 const LIFT = 1.5;
-/** New parcels drawn per animation frame. */
-const ADD_PER_FRAME = 60;
-const LINE = { colour: "#ffffffb8", width: 2 };
-const LIT_WIDTH = 3.5;
+const LINE_WIDTH = 3;
 
 function metres(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
   const dx = (b.lng - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
@@ -57,8 +55,6 @@ function contains(parcel: Parcel, lon: number, lat: number): boolean {
   return parcel.polygons.some((rings) => inRing(rings[0], lon, lat) && !rings.slice(1).some((hole) => inRing(hole, lon, lat)));
 }
 
-import { watchStill } from "./still";
-
 type Feature = { properties?: { AIN?: string }; geometry?: { type: string; coordinates: unknown } };
 
 export function parcelLines(map3d: Map3D, lib: Record<string, unknown>, alive: () => boolean, onCount: (count: number) => void): ParcelLayer {
@@ -67,32 +63,28 @@ export function parcelLines(map3d: Map3D, lib: Record<string, unknown>, alive: (
   const have = new Map<string, Parcel>();
   let fetched: { lat: number; lng: number; reach: number } | null = null;
   let controller: AbortController | null = null;
-  let lit: Parcel | null = null;
+  let lit: { parcel: Parcel; colour: string; lines: Polyline[] } | null = null;
 
   const unlight = () => {
     if (!lit) return;
-    for (const line of lit.lines) {
-      line.strokeColor = LINE.colour;
-      line.strokeWidth = LINE.width;
-    }
+    for (const line of lit.lines) line.remove();
     lit = null;
-  };
-  const drop = (parcel: Parcel) => {
-    if (lit === parcel) lit = null;
-    for (const line of parcel.lines) line.remove();
-    have.delete(parcel.ain);
   };
   const clear = () => {
     controller?.abort();
     controller = null;
-    for (const parcel of [...have.values()]) drop(parcel);
+    unlight();
+    have.clear();
     fetched = null;
     onCount(0);
   };
   const trim = (centre: { lat: number; lng: number }) => {
     if (have.size <= KEEP) return;
     const far = [...have.values()].sort((a, b) => metres(centre, { lat: b.lat, lng: b.lon }) - metres(centre, { lat: a.lat, lng: a.lon }));
-    for (const parcel of far.slice(0, have.size - TRIM_TO)) drop(parcel);
+    for (const parcel of far.slice(0, have.size - TRIM_TO)) {
+      if (lit?.parcel === parcel) unlight();
+      have.delete(parcel.ain);
+    }
   };
   const add = (feature: Feature) => {
     const ain = feature.properties?.AIN;
@@ -101,23 +93,7 @@ export function parcelLines(map3d: Map3D, lib: Record<string, unknown>, alive: (
     const polygons = (geometry.type === "Polygon" ? [geometry.coordinates] : geometry.type === "MultiPolygon" ? geometry.coordinates : []) as Ring[][];
     if (polygons.length === 0 || polygons[0].length === 0 || polygons[0][0].length === 0) return;
     const [lon, lat] = polygons[0][0][0];
-    const lines: Polyline[] = [];
-    for (const rings of polygons) {
-      for (const ring of rings) {
-        const line = new Polyline3D({
-          path: ring.map(([x, y]) => ({ lat: y, lng: x, altitude: LIFT })),
-          strokeColor: LINE.colour,
-          strokeWidth: LINE.width,
-          outerColor: "#00000070",
-          outerWidth: 0.3,
-          altitudeMode: AltitudeMode.RELATIVE_TO_MESH,
-          drawsOccludedSegments: false,
-        });
-        map3d.append(line);
-        lines.push(line);
-      }
-    }
-    have.set(ain, { ain, polygons, lines, lon, lat });
+    have.set(ain, { ain, polygons, lon, lat });
   };
   const load = async (centre: { lat: number; lng: number }, reach: number) => {
     controller?.abort();
@@ -145,19 +121,9 @@ export function parcelLines(map3d: Map3D, lib: Record<string, unknown>, alive: (
       return; // aborted by a newer request, or the service is unreachable: the lines are a bonus
     }
     if (!alive() || signal.aborted) return;
-    // A few hundred new lines at once would stall the frame; they go on over a few frames.
-    const queue = features.filter((feature) => feature.properties?.AIN && !have.has(feature.properties.AIN));
-    const step = () => {
-      if (!alive() || signal.aborted) return;
-      for (const feature of queue.splice(0, ADD_PER_FRAME)) add(feature);
-      if (queue.length > 0) {
-        requestAnimationFrame(step);
-        return;
-      }
-      trim(centre);
-      onCount(have.size);
-    };
-    step();
+    for (const feature of features) add(feature);
+    trim(centre);
+    onCount(have.size);
   };
   const refresh = () => {
     const centre = map3d.center;
@@ -180,16 +146,28 @@ export function parcelLines(map3d: Map3D, lib: Record<string, unknown>, alive: (
   refresh();
 
   return {
-    highlight(at, colour = "#dcf763") {
+    highlight(at, colour = "#ffffff") {
       const next = at ? ([...have.values()].find((parcel) => contains(parcel, at.lon, at.lat)) ?? null) : null;
-      if (next === lit) return;
+      if (next === (lit?.parcel ?? null) && (!next || colour === lit?.colour)) return;
       unlight();
       if (!next) return;
-      lit = next;
-      for (const line of next.lines) {
-        line.strokeColor = colour;
-        line.strokeWidth = LIT_WIDTH;
+      const lines: Polyline[] = [];
+      for (const rings of next.polygons) {
+        for (const ring of rings) {
+          const line = new Polyline3D({
+            path: ring.map(([x, y]) => ({ lat: y, lng: x, altitude: LIFT })),
+            strokeColor: colour,
+            strokeWidth: LINE_WIDTH,
+            outerColor: "#00000080",
+            outerWidth: 0.3,
+            altitudeMode: AltitudeMode.RELATIVE_TO_MESH,
+            drawsOccludedSegments: false,
+          });
+          map3d.append(line);
+          lines.push(line);
+        }
       }
+      lit = { parcel: next, colour, lines };
     },
     destroy() {
       stopWatching();

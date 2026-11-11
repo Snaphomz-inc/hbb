@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { saleKindName } from "../components/SaleTeasers";
 import { money } from "../lib/format";
 import { listingUrl } from "../links";
-import { PARCEL_CREDIT, parcelLines, type ParcelLayer } from "./parcels";
+import { PARCEL_CREDIT, PARCEL_RANGE_MAX, parcelLines, type ParcelLayer } from "./parcels";
 import { watchStill } from "./still";
 
 /**
@@ -177,7 +177,9 @@ function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lon: n
  * the centre, tilted off the nadir by `tilt` and turned to `heading`. Google draws its markers in
  * WebGL and reports nothing about where, so this is how a pointer finds a pin.
  */
-function projector(cam: GoogleCamera, width: number, height: number): (lon: number, lat: number, alt: number) => { x: number; y: number } | null {
+type Frame = { cam: GoogleCamera; width: number; height: number; f: number[]; P: number[]; r: number[]; u: number[]; k: number; mlat: number; mlon: number };
+
+function cameraFrame(cam: GoogleCamera, width: number, height: number): Frame {
   const t = (cam.tilt * Math.PI) / 180;
   const h = (cam.heading * Math.PI) / 180;
   // The view direction, the camera's place, and its right and up axes, in metres east/north/up of the centre.
@@ -186,8 +188,11 @@ function projector(cam: GoogleCamera, width: number, height: number): (lon: numb
   const r = [Math.cos(h), -Math.sin(h), 0];
   const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
   const k = height / 2 / Math.tan(((FOV_DEG / 2) * Math.PI) / 180);
-  const mlat = 110540;
-  const mlon = 111320 * Math.cos((cam.center.lat * Math.PI) / 180);
+  return { cam, width, height, f, P, r, u, k, mlat: 110540, mlon: 111320 * Math.cos((cam.center.lat * Math.PI) / 180) };
+}
+
+function projector(cam: GoogleCamera, width: number, height: number): (lon: number, lat: number, alt: number) => { x: number; y: number } | null {
+  const { f, P, r, u, k, mlat, mlon } = cameraFrame(cam, width, height);
   return (lon, lat, alt) => {
     const v = [(lon - cam.center.lng) * mlon - P[0], (lat - cam.center.lat) * mlat - P[1], alt - P[2]];
     const depth = v[0] * f[0] + v[1] * f[1] + v[2] * f[2];
@@ -197,6 +202,41 @@ function projector(cam: GoogleCamera, width: number, height: number): (lon: numb
       y: height / 2 - ((v[0] * u[0] + v[1] * u[1] + v[2] * u[2]) / depth) * k,
     };
   };
+}
+
+/**
+ * The ground under a screen point: the ray through the pixel, marched out from the camera until it
+ * drops below the terrain model, then narrowed down. Google reports nothing about what is under the
+ * pointer, so this is how a pointer finds a lot.
+ */
+function groundUnder(frame: Frame, x: number, y: number, groundAt: (lon: number, lat: number) => number | null): { lon: number; lat: number } | null {
+  const { cam, width, height, f, P, r, u, k, mlat, mlon } = frame;
+  const sx = (x - width / 2) / k;
+  const sy = (height / 2 - y) / k;
+  const d = [f[0] + sx * r[0] + sy * u[0], f[1] + sx * r[1] + sy * u[1], f[2] + sx * r[2] + sy * u[2]];
+  if (d[2] >= 0) return null; // above the horizon
+  const place = (s: number) => ({ lon: cam.center.lng + (P[0] + d[0] * s) / mlon, lat: cam.center.lat + (P[1] + d[1] * s) / mlat, alt: P[2] + d[2] * s });
+  const below = (s: number): boolean | null => {
+    const at = place(s);
+    const ground = groundAt(at.lon, at.lat);
+    return ground == null ? null : at.alt <= ground;
+  };
+  const step = Math.max(4, cam.range / 120);
+  for (let s = step; s < cam.range * 4; s += step) {
+    const hit = below(s);
+    if (hit === null) return null;
+    if (!hit) continue;
+    let lo = s - step;
+    let hi = s;
+    for (let i = 0; i < 6; i++) {
+      const mid = (lo + hi) / 2;
+      if (below(mid) === false) lo = mid;
+      else hi = mid;
+    }
+    const at = place(hi);
+    return { lon: at.lon, lat: at.lat };
+  }
+  return null;
 }
 
 function el(className: string, text: string): HTMLElement {
@@ -295,6 +335,7 @@ async function pinSales(
   let lit: Sale3D | null = null;
   let down: { x: number; y: number; touch: boolean } | null = null;
   let frame = 0;
+  let groundKey = "";
   const currentProjector = () => {
     const centre = map3d.center;
     return centre ? projector({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, host.clientWidth, host.clientHeight) : null;
@@ -349,12 +390,22 @@ async function pinSales(
   const tick = () => {
     if (!alive()) return;
     frame = requestAnimationFrame(tick);
-    if (shown.size === 0) return;
     // Which chip is under the pointer. While the button is down the hover is frozen, so a click on
     // a chip keeps it through the release; a drag lets go of it below.
     if (pointer && !down) {
       const best = pick(pointer);
       if (best !== hover) show(best, false);
+    }
+    // With no chip under the pointer, the lot under it is outlined (worked out again only when the
+    // pointer or the camera has moved).
+    if (parcels && pointer && !down && !(pinned ?? hover)) {
+      const centre = map3d.center;
+      const key = centre ? `${pointer.x},${pointer.y},${centre.lat},${centre.lng},${map3d.range},${map3d.tilt},${map3d.heading}` : "";
+      if (centre && key !== groundKey) {
+        groundKey = key;
+        const at = map3d.range <= PARCEL_RANGE_MAX ? groundUnder(cameraFrame({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, host.clientWidth, host.clientHeight), pointer.x, pointer.y, groundAt) : null;
+        parcels.highlight(at);
+      }
     }
     // The card rides above its chip.
     const sale = pinned ?? hover;
@@ -381,9 +432,11 @@ async function pinSales(
   };
   const onLeave = (event?: PointerEvent) => {
     pointer = null;
+    groundKey = "";
     // Leaving the map for the card is not leaving the pin.
     if (event?.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
     if (hover) show(null, false);
+    if (!pinned) parcels?.highlight(null);
   };
   const onCardLeave = (event: PointerEvent) => {
     if (event.relatedTarget instanceof Node && host.contains(event.relatedTarget)) return;
@@ -555,10 +608,10 @@ export function Explore({
       <div className="explore-hint">
         {sales.length > 0 ? (
           <>
-            <span className="explore-hint-pin" aria-hidden="true" /> sold · <span className="explore-hint-pin is-sale" aria-hidden="true" /> for sale · hover a price, click it for the listing · zoom in for lot lines · esc to return
+            <span className="explore-hint-pin" aria-hidden="true" /> sold · <span className="explore-hint-pin is-sale" aria-hidden="true" /> for sale · hover a price, click it for the listing · zoom in and hover a lot for its lines · esc to return
           </>
         ) : (
-          "scroll to zoom · drag to look around · zoom in for lot lines · esc to return"
+          "scroll to zoom · drag to look around · zoom in and hover a lot for its lines · esc to return"
         )}
       </div>
       {lotCount > 0 && <div className="explore-credit">{PARCEL_CREDIT}</div>}
