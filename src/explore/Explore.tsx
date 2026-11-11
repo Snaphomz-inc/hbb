@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { saleKindName } from "../components/SaleTeasers";
 import { money } from "../lib/format";
 import { listingUrl } from "../links";
+import { PARCEL_CREDIT, parcelLines, type ParcelLayer } from "./parcels";
+import { watchStill } from "./still";
 
 /**
  * The look-around view: Google's photorealistic 3D mesh, opened on exactly the camera the
@@ -122,10 +124,47 @@ const PIN_LIMIT = 160;
 const FOV_DEG = 35;
 /** A pin's anchor sits on the mesh, a few metres above the terrain model's ground. */
 const PIN_LIFT = 5;
-/** The pin's head sits this far above its anchor (css px); a pointer this close to the head is on it. */
-const PIN_HEAD = 16;
-const PIN_RADIUS = 20;
 const PIN_COLOURS: Record<Sale3D["status"], string> = { sold: "#dcf763", "for sale": "#fb923c" };
+/**
+ * Each home is a price chip: a rounded box with a tail down to the roof, drawn as an SVG image so
+ * the price is bold and lit, while Google still places it, keeps it the same size at any distance
+ * and hides it behind hills like any marker. Sizes in css px; the chip's tail tip is the anchor.
+ */
+const CHIP_H = 22;
+const CHIP_TAIL = 10;
+const CHIP_PAD = 14;
+const CHIP_CHAR = 8;
+/** How far outside the chip's box a pointer still counts as on it. */
+const CHIP_SLACK = 3;
+/** How far above the terrain model a home's roof may put its chip on the mesh, metres. */
+const MESH_SLACK_M = 10;
+
+function chipWidth(text: string): number {
+  return CHIP_PAD + text.length * CHIP_CHAR;
+}
+
+function chipImage(text: string, status: Sale3D["status"], hot: boolean): string {
+  const colour = PIN_COLOURS[status];
+  const w = chipWidth(text);
+  const h = CHIP_H;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h + CHIP_TAIL}" viewBox="0 0 ${w} ${h + CHIP_TAIL}">` +
+    `<rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="6" fill="${hot ? colour : "#0b0e14"}" stroke="${colour}" stroke-width="${hot ? 2 : 1.5}"/>` +
+    `<path d="M${w / 2 - 5} ${h - 1.5} L${w / 2} ${h + CHIP_TAIL - 1} L${w / 2 + 5} ${h - 1.5} Z" fill="${colour}"/>` +
+    `<text x="${w / 2}" y="${h / 2 + 4.5}" text-anchor="middle" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-weight="700" font-size="13" fill="${hot ? "#0b0e14" : "#ffffff"}">${text}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** The marker's graphic. Google only reads a template once, so a change is a new template. */
+function chipTemplate(sale: Sale3D, hot: boolean): HTMLTemplateElement {
+  const template = document.createElement("template");
+  const image = document.createElement("img");
+  image.src = chipImage(money(sale.price), sale.status, hot);
+  image.alt = "";
+  template.content.append(image);
+  return template;
+}
 
 function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lon: number }): number {
   const dx = (b.lon - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
@@ -170,6 +209,7 @@ function el(className: string, text: string): HTMLElement {
 /** The card over a pin: status and month, price, address, the facts, and the listing when there is one. */
 function fillCard(card: HTMLElement, sale: Sale3D): void {
   card.replaceChildren();
+  card.classList.toggle("is-sale", sale.status === "for sale");
   card.append(el(`sale-tip-status is-${sale.status === "sold" ? "sold" : "sale"}`, sale.status === "sold" ? `Sold · ${sale.when}` : `For sale · ${sale.when}`));
   card.append(el("sale-tip-price", money(sale.price)));
   if (sale.address) card.append(el("sale-tip-address", sale.address));
@@ -189,12 +229,12 @@ function fillCard(card: HTMLElement, sale: Sale3D): void {
 type PinLayer = { destroy(): void };
 
 /**
- * The homes as pins on Google's mesh, each labelled with its price, with a card that follows the
- * pointer onto a pin. Google's 3D markers only report clicks, so the hover is ours: every frame the
- * pins are projected through the camera model above and the pointer is matched to the nearest head.
- * A click on a pin opens its listing; a tap (no hover) pins the card, whose link opens the listing.
- * Only the nearest PIN_LIMIT to the camera's centre are on the map, refreshed whenever the camera
- * comes to rest somewhere else.
+ * The homes as price chips on Google's mesh, with a card that follows the pointer onto a chip.
+ * Google's 3D markers only report clicks, so the hover is ours: every frame the chips are projected
+ * through the camera model above and the pointer is matched to the chip it is inside. The chip
+ * under the pointer lights up, and so does its lot. A click on a chip opens its listing; a tap (no
+ * hover) pins the card, whose link opens the listing. Only the nearest PIN_LIMIT to the camera's
+ * centre are on the map, refreshed whenever the camera comes to rest somewhere else.
  */
 async function pinSales(
   map3d: Map3D,
@@ -203,17 +243,18 @@ async function pinSales(
   groundAt: (lon: number, lat: number) => number | null,
   host: HTMLElement,
   card: HTMLElement,
+  parcels: ParcelLayer | null,
   alive: () => boolean,
 ): Promise<PinLayer | null> {
   if (sales.length === 0 || !window.google) return null;
   const Marker = lib.Marker3DElement as new (options: Record<string, unknown>) => Marker3D;
   const AltitudeMode = lib.AltitudeMode as Record<string, string>;
   const markerLib = await window.google.maps.importLibrary("marker");
-  const PinElement = markerLib.PinElement as new (options: Record<string, unknown>) => HTMLElement;
   if (!alive()) return null;
   const onMesh = AltitudeMode.RELATIVE_TO_MESH ?? AltitudeMode.CLAMP_TO_GROUND;
+  const collision = (markerLib.CollisionBehavior as Record<string, string> | undefined)?.OPTIONAL_AND_HIDES_LOWER_PRIORITY ?? "OPTIONAL_AND_HIDES_LOWER_PRIORITY";
 
-  const shown = new Map<number, { marker: Marker3D; sale: Sale3D; alt: number }>();
+  const shown = new Map<number, { marker: Marker3D; sale: Sale3D; alt: number; half: number }>();
   let lastCentre: { lat: number; lng: number } | null = null;
   const refresh = () => {
     const centre = map3d.center;
@@ -233,10 +274,11 @@ async function pinSales(
     }
     for (const { sale } of nearest) {
       if (shown.has(sale.id)) continue;
-      const marker = new Marker({ position: { lat: sale.lat, lng: sale.lon, altitude: 0 }, altitudeMode: onMesh, label: money(sale.price), extruded: false });
-      marker.append(new PinElement({ background: PIN_COLOURS[sale.status], borderColor: "#111827", glyphColor: "#111827", scale: 0.85 }));
+      // Chips that would overlap hide behind each other rather than pile up.
+      const marker = new Marker({ position: { lat: sale.lat, lng: sale.lon, altitude: 0 }, altitudeMode: onMesh, extruded: false, sizePreserved: true, collisionBehavior: collision });
+      marker.append(chipTemplate(sale, false));
       map3d.append(marker);
-      shown.set(sale.id, { marker, sale, alt: (groundAt(sale.lon, sale.lat) ?? centre.altitude) + PIN_LIFT });
+      shown.set(sale.id, { marker, sale, alt: (groundAt(sale.lon, sale.lat) ?? centre.altitude) + PIN_LIFT, half: chipWidth(money(sale.price)) / 2 + CHIP_SLACK });
     }
   };
   refresh();
@@ -244,13 +286,53 @@ async function pinSales(
     if ((event as Event & { isSteady?: boolean }).isSteady) refresh();
   };
   map3d.addEventListener("gmp-steadychange", onSteady);
+  const stopWatching = watchStill(map3d, alive, refresh);
 
   // The hover: the pointer's place, the pin under it, and (after a tap) the pin whose card stays.
   let pointer: { x: number; y: number } | null = null;
   let hover: Sale3D | null = null;
   let pinned: Sale3D | null = null;
+  let lit: Sale3D | null = null;
   let down: { x: number; y: number; touch: boolean } | null = null;
   let frame = 0;
+  const currentProjector = () => {
+    const centre = map3d.center;
+    return centre ? projector({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, host.clientWidth, host.clientHeight) : null;
+  };
+  /**
+   * The chip under a screen point: inside its box (plus slack), the nearest box centre wins. A chip's
+   * tail rests on Google's mesh, which carries roofs and trees the terrain model does not, so close
+   * up the projection can be a roof's height off vertically; the box grows by that much on screen.
+   */
+  const pick = (at: { x: number; y: number }, slack = 0): Sale3D | null => {
+    const project = currentProjector();
+    if (!project) return null;
+    const focal = host.clientHeight / 2 / Math.tan(((FOV_DEG / 2) * Math.PI) / 180);
+    const slackY = Math.min(48, Math.max(CHIP_SLACK, (focal * MESH_SLACK_M) / map3d.range));
+    let best: Sale3D | null = null;
+    let bestGap = Infinity;
+    for (const entry of shown.values()) {
+      const tip = project(entry.sale.lon, entry.sale.lat, entry.alt);
+      if (!tip) continue;
+      const dx = Math.abs(tip.x - at.x);
+      const dy = Math.abs(tip.y - CHIP_TAIL - CHIP_H / 2 - at.y);
+      if (dx > entry.half + slack || dy > CHIP_H / 2 + slackY + slack) continue;
+      const gap = Math.hypot(dx, dy);
+      if (gap < bestGap) {
+        bestGap = gap;
+        best = entry.sale;
+      }
+    }
+    return best;
+  };
+  /** The chip with the card lights up, and so does its lot. */
+  const light = (sale: Sale3D | null) => {
+    if (sale === lit) return;
+    if (lit) shown.get(lit.id)?.marker.querySelector("template")?.replaceWith(chipTemplate(lit, false));
+    lit = sale;
+    if (sale) shown.get(sale.id)?.marker.querySelector("template")?.replaceWith(chipTemplate(sale, true));
+    parcels?.highlight(sale ? { lon: sale.lon, lat: sale.lat } : null, sale ? PIN_COLOURS[sale.status] : undefined);
+  };
   const show = (sale: Sale3D | null, keep: boolean) => {
     const was = pinned ?? hover;
     if (keep) pinned = sale;
@@ -262,40 +344,30 @@ async function pinSales(
     }
     card.classList.toggle("pinned", pinned !== null);
     host.style.cursor = hover ? "pointer" : "";
+    light(now);
   };
   const tick = () => {
     if (!alive()) return;
     frame = requestAnimationFrame(tick);
-    const centre = map3d.center;
-    if (!centre || shown.size === 0) return;
-    const width = host.clientWidth;
-    const height = host.clientHeight;
-    const project = projector({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, width, height);
-    // Which pin is under the pointer. While the button is down the hover is frozen, so a click on a
-    // pin keeps its pin through the release; a drag lets go of it below.
+    if (shown.size === 0) return;
+    // Which chip is under the pointer. While the button is down the hover is frozen, so a click on
+    // a chip keeps it through the release; a drag lets go of it below.
     if (pointer && !down) {
-      let best: Sale3D | null = null;
-      let bestGap = PIN_RADIUS;
-      for (const entry of shown.values()) {
-        const at = project(entry.sale.lon, entry.sale.lat, entry.alt);
-        if (!at) continue;
-        const gap = Math.hypot(at.x - pointer.x, at.y - PIN_HEAD - pointer.y);
-        if (gap < bestGap) {
-          bestGap = gap;
-          best = entry.sale;
-        }
-      }
+      const best = pick(pointer);
       if (best !== hover) show(best, false);
     }
-    // The card rides on its pin.
+    // The card rides above its chip.
     const sale = pinned ?? hover;
     if (sale) {
       const entry = shown.get(sale.id);
-      const at = entry ? project(sale.lon, sale.lat, entry.alt) : null;
+      const project = currentProjector();
+      const at = entry && project ? project(sale.lon, sale.lat, entry.alt) : null;
+      const width = host.clientWidth;
+      const height = host.clientHeight;
       if (!at || at.x < -40 || at.x > width + 40 || at.y < -40 || at.y > height + 40) {
         show(null, pinned !== null);
       } else {
-        card.style.transform = `translate(${at.x.toFixed(1)}px, ${(at.y - PIN_HEAD - 18).toFixed(1)}px) translate(-50%, -100%)`;
+        card.style.transform = `translate(${at.x.toFixed(1)}px, ${(at.y - CHIP_TAIL - CHIP_H - 10).toFixed(1)}px) translate(-50%, -100%)`;
       }
     }
   };
@@ -334,26 +406,8 @@ async function pinSales(
     down = null;
     if (!tap) return;
     if (touch) {
-      // No hover on a touch screen: a tap on a pin pins its card; a tap elsewhere lets it go.
-      pointer = { x: event.clientX, y: event.clientY };
-      const width = host.clientWidth;
-      const height = host.clientHeight;
-      const centre = map3d.center;
-      if (!centre) return;
-      const project = projector({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, width, height);
-      let best: Sale3D | null = null;
-      let bestGap = PIN_RADIUS * 1.4;
-      for (const entry of shown.values()) {
-        const at = project(entry.sale.lon, entry.sale.lat, entry.alt);
-        if (!at) continue;
-        const gap = Math.hypot(at.x - pointer.x, at.y - PIN_HEAD - pointer.y);
-        if (gap < bestGap) {
-          bestGap = gap;
-          best = entry.sale;
-        }
-      }
-      pointer = null;
-      show(best, true);
+      // No hover on a touch screen: a tap on a chip pins its card; a tap elsewhere lets it go.
+      show(pick({ x: event.clientX, y: event.clientY }, 8), true);
     } else if (hover?.listing) {
       window.open(listingUrl(hover.listing), "_blank", "noopener");
     }
@@ -369,6 +423,8 @@ async function pinSales(
   return {
     destroy() {
       cancelAnimationFrame(frame);
+      light(null);
+      stopWatching();
       map3d.removeEventListener("gmp-steadychange", onSteady);
       host.removeEventListener("pointermove", onMove);
       host.removeEventListener("pointerleave", onLeave);
@@ -406,8 +462,10 @@ export function Explore({
   const card = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map3D | null>(null);
   const layer = useRef<PinLayer | null>(null);
+  const lots = useRef<ParcelLayer | null>(null);
   const opened = useRef<ViewCamera>(getCamera());
   const [state, setState] = useState<"loading" | "ready" | "failed">("loading");
+  const [lotCount, setLotCount] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -421,7 +479,8 @@ export function Explore({
         const map3d = new Map3DElement({ ...toGoogle(opened.current, height), mode: MapMode.HYBRID, defaultUIDisabled: true, gestureHandling: "GREEDY" });
         mapRef.current = map3d;
         host.current.append(map3d);
-        pinSales(map3d, lib, sales, groundAt, host.current, card.current!, () => alive)
+        if (lib.Polyline3DElement) lots.current = parcelLines(map3d, lib, () => alive, (count) => alive && setLotCount(count));
+        pinSales(map3d, lib, sales, groundAt, host.current, card.current!, lots.current, () => alive)
           .then((pins) => {
             if (!alive) pins?.destroy();
             else layer.current = pins;
@@ -457,6 +516,7 @@ export function Explore({
     return () => {
       alive = false;
       layer.current?.destroy();
+      lots.current?.destroy();
       document.documentElement.classList.remove("exploring");
     };
     // Opened once per entry; the camera is the one it opened on.
@@ -495,12 +555,13 @@ export function Explore({
       <div className="explore-hint">
         {sales.length > 0 ? (
           <>
-            <span className="explore-hint-pin" aria-hidden="true" /> sold · <span className="explore-hint-pin is-sale" aria-hidden="true" /> for sale, hover a pin · scroll to zoom · drag to look around · esc to return
+            <span className="explore-hint-pin" aria-hidden="true" /> sold · <span className="explore-hint-pin is-sale" aria-hidden="true" /> for sale · hover a price, click it for the listing · zoom in for lot lines · esc to return
           </>
         ) : (
-          "scroll to zoom · drag to look around · esc to return"
+          "scroll to zoom · drag to look around · zoom in for lot lines · esc to return"
         )}
       </div>
+      {lotCount > 0 && <div className="explore-credit">{PARCEL_CREDIT}</div>}
     </div>
   );
 }

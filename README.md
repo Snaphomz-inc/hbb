@@ -105,6 +105,24 @@ out and the story camera glides from wherever you left off back to its chapter. 
 distance, tilting toward the horizon and wheeling a little, and Google's mesh fades in on the
 view it lands on, the mirror of the glide back out. Without the key nothing changes and the pill is not rendered. Each entry is one Google 3D map load for billing.
 
+Inside Google 3D the homes ride on the mesh as price chips: the nearest 160 to wherever the camera
+is looking, lime for closed sales and orange for homes for sale, drawn as SVG marker images so the
+price is bold and Google still places them, keeps them one size at any distance, hides them behind
+hills and lets overlapping chips hide behind each other. Google's 3D markers report clicks only, so
+the hover is ours: every frame the chips are projected through a pinhole model of Google's camera
+(`src/explore/Explore.tsx`) and the pointer is matched to the chip it is inside. The chip under the
+pointer fills with its colour, its card appears above (status and month, price, address, facts, the
+listing link), and a click on the chip or the card opens the listing on Snaphomz. A chip's tail sits
+on the mesh, which includes roofs, so close up the hit box grows by a roof's height on screen.
+
+Zoom in past 1.6 km and lot lines appear: the LA County Assessor's parcel polygons (2025 roll) from
+the County's public ArcGIS feature service, fetched for the area around the camera whenever it comes
+to rest and kept as you pan (`src/explore/parcels.ts`). They are thin white lines a metre and a half
+above the mesh; the lot under a hovered home lights in the home's colour. A credit to the Assessor
+sits by Google's logo while any are on screen. Google's `gmp-steadychange` event does not fire for
+every wheel zoom or for a camera set from code, so both the chips and the lot lines refresh from a
+small camera-at-rest watcher of our own (`src/explore/still.ts`).
+
 ## Cities
 
 One codebase, one city per build. A city is a folder under `cities/`:
@@ -171,4 +189,4 @@ frames inside After Effects and has no interactive or web output.
 
 ## Homes for sale
 
-`scripts/fetch_active_listings.py` adds the homes currently for sale to each neighborhood file (`active`, same tuple shape as `sales`) from RealEstateAPI's MLSSearch, the feed behind the main site's listing search. It needs `REAPI_API_KEY` in `.env`. The story draws them as coral dots with a white ring in the Homes and closing chapters, the hover card says "For sale" with the month listed, and Google 3D pins them in coral. Glendale carries a sample pulled from the live site on 2026-11-10 until the key is in place.
+`scripts/fetch_active_listings.py` adds the homes currently for sale to each neighborhood file (`active`, same tuple shape as `sales`) from RealEstateAPI's MLSSearch, the feed behind the main site's listing search. It needs `REAPI_API_KEY` in `.env`. The story draws them as coral dots with a white ring in the Homes and closing chapters, the hover card says "For sale" with the month listed, and Google 3D shows them as orange price chips. Glendale carries a sample pulled from the live site on 2026-11-10 until the key is in place.
