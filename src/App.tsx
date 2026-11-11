@@ -64,6 +64,7 @@ const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
     { swatch: "dot #DCF763", label: "Middle third" },
     { swatch: "dot #fb7185", label: "Top third" },
   ],
+  active: [{ swatch: "ring #fb7185", label: "For sale now" }],
   "sales-heat": [{ swatch: "heat", label: "Dollar volume of sales, last 12 months: warmer is more" }],
   routes: [
     { swatch: "solid #DCF763", label: "Drive, no traffic" },
@@ -169,6 +170,13 @@ function Sparkline({ series }: { series: Array<{ year: number; index: number }> 
   );
 }
 
+/** "Apr 2026" for a sale `monthsAgo` months before the end of the sales window ("2026-10"). */
+function saleMonth(windowTo: string, monthsAgo: number): string {
+  const [year, month] = windowTo.split("-").map(Number);
+  if (!year || !month) return "";
+  return new Date(year, month - 1 - monthsAgo, 1).toLocaleString("en-US", { month: "short", year: "numeric" });
+}
+
 function Question({ text }: { text: string }) {
   const shown = useScramble(text, 600);
   return <div className="question">{shown}</div>;
@@ -225,7 +233,7 @@ export function App() {
   // The sale a click flew down to; its card stays pinned until free look ends.
   const focused = useRef<number | null>(null);
   // The sale dot under the pointer, for the hover card; a click on it opens the listing on the main site.
-  const [saleTip, setSaleTip] = useState<{ price: number; beds: number; sqft: number; kind: number; address: string } | null>(null);
+  const [saleTip, setSaleTip] = useState<{ price: number; beds: number; sqft: number; kind: number; address: string; when: string; status: "sold" | "for sale" } | null>(null);
   // The card's place follows the pointer straight through the DOM; React only renders when the dot changes.
   const tipNode = useRef<HTMLDivElement>(null);
   const tipAt = useRef({ x: 0, y: 0 });
@@ -428,9 +436,7 @@ export function App() {
   /** The sold homes as Google 3D pins, with what their card says. */
   const sales3d = useMemo<Sale3D[]>(() => {
     if (!data) return [];
-    const [endYear, endMonth] = data.market.window.to.split("-").map(Number);
-    const monthOf = (monthsAgo: number) => new Date(endYear, endMonth - 1 - monthsAgo, 1).toLocaleString("en-US", { month: "short", year: "numeric" });
-    return data.sales.map((s, id) => ({
+    const pin = (s: Neighborhood["sales"][number], id: number, status: Sale3D["status"]): Sale3D => ({
       id,
       lon: s[0],
       lat: s[1],
@@ -438,11 +444,13 @@ export function App() {
       sqft: s[3],
       kind: s[4],
       beds: s[5],
-      when: monthOf(s[6]),
+      when: saleMonth(data.market.window.to, s[6]),
       listing: s[7] ?? "",
       address: s[8] ?? "",
-      status: "sold" as const,
-    }));
+      status,
+    });
+    // Ids continue past the sold homes, the way the map's own hit test numbers them.
+    return [...data.sales.map((s, id) => pin(s, id, "sold")), ...(data.active ?? []).map((s, i) => pin(s, data.sales.length + i, "for sale"))];
   }, [data]);
 
   const enterFree = () => {
@@ -495,6 +503,13 @@ export function App() {
     };
   };
 
+  /** Terrain height under a point in plain metres (the map's own is exaggerated), or null where no tile is loaded. */
+  const groundAt = (lon: number, lat: number): number | null => {
+    if (!map || !mapAlive(map)) return null;
+    const height = map.queryTerrainElevation([lon, lat]);
+    return height == null ? null : height / (map.getTerrain()?.exaggeration ?? 1);
+  };
+
   /** Fly down to a point on the map and open Google 3D on it, so the area around it can be checked up close. */
   const lookAt = (at: { lon: number; lat: number }) => {
     if (!map || !mapAlive(map) || explore !== "off") return;
@@ -541,7 +556,7 @@ export function App() {
     if (!data) return [];
     const median = data.market.all.medianPrice;
     return data.sales
-      .map((s, id) => ({ id, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "", t: saleTime(id, s[6]) }))
+      .map((s, id) => ({ id, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "", when: saleMonth(data.market.window.to, s[6]), status: "sold" as const, t: saleTime(id, s[6]) }))
       .filter((s) => s.listing && s.address && s.kind <= 1 && s.sqft > 0)
       .sort((a, b) => Math.abs(a.price - median) - Math.abs(b.price - median));
   }, [data]);
@@ -591,9 +606,15 @@ export function App() {
     // with a remembered ground height per sale (the DEM read is the slow part, and it also drops to sea
     // level for a frame at tile edges), so a sweep across the dots costs next to nothing.
     const sales = dataRef.current?.sales ?? [];
-    const lngLats = sales.map((s) => new LngLat(s[0], s[1]));
-    const heights = new Float64Array(sales.length);
-    const screen = new Float64Array(sales.length * 2);
+    const active = dataRef.current?.active ?? [];
+    // One list of homes: the sold ones first (their ids match the sales source), then the ones for sale.
+    const homes = [...sales, ...active];
+    const windowTo = dataRef.current?.market.window.to ?? "";
+    const lngLats = homes.map((s) => new LngLat(s[0], s[1]));
+    const heights = new Float64Array(homes.length);
+    const screen = new Float64Array(homes.length * 2);
+    /** The map feature behind a home id: a sold home in the sales source, a listed one in the active source. */
+    const featureOf = (id: number) => (id < sales.length ? { source: "sales", id } : { source: "active", id: id - sales.length });
     let cameraVersion = 0;
     let projectedFor = -1;
     const bump = () => {
@@ -606,7 +627,7 @@ export function App() {
       if (projectedFor === cameraVersion) return;
       projectedFor = cameraVersion;
       const terrain = map.getTerrain();
-      for (let i = 0; i < sales.length; i += 1) {
+      for (let i = 0; i < homes.length; i += 1) {
         if (terrain && heights[i] === 0) heights[i] = map.queryTerrainElevation(lngLats[i]) ?? 0;
         height = heights[i];
         const p = map.transform.locationToScreenPoint(lngLats[i], terrain ? fixed : undefined);
@@ -630,8 +651,10 @@ export function App() {
       const pad = 9;
       let best = -1;
       let bestGap = pad;
-      for (let i = 0; i < sales.length; i += 1) {
-        if (!on[i]) continue;
+      const activeShown = chapterRef.current.layers.includes("active") && Boolean(map.getLayer("active"));
+      for (let i = 0; i < homes.length; i += 1) {
+        // A sold dot counts once the timeline has reached it; a for-sale dot whenever its layer is on.
+        if (i < sales.length ? !on[i] : !activeShown) continue;
         const d = Math.hypot(screen[i * 2] - point.x, screen[i * 2 + 1] - point.y);
         // Where dots crowd, the one nearest the pointer wins.
         if (d < bestGap) {
@@ -640,15 +663,17 @@ export function App() {
         }
       }
       if (best < 0) return null;
-      const s = sales[best];
-      return { id: best, teaser: false, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "" };
+      const s = homes[best];
+      const status = best < sales.length ? ("sold" as const) : ("for sale" as const);
+      return { id: best, teaser: false, lon: s[0], lat: s[1], price: s[2], sqft: s[3], kind: s[4], beds: s[5], listing: s[7] ?? "", address: s[8] ?? "", when: saleMonth(windowTo, s[6]), status };
     };
     const releaseHover = () => {
       const current = hovering.current;
       if (!current) return;
       cancelAnimationFrame(current.frame);
       hovering.current = null;
-      if (mapAlive(map) && map.getSource("sales")) map.setFeatureState({ source: "sales", id: current.id }, { hover: -1, ring: 1 });
+      const feature = featureOf(current.id);
+      if (mapAlive(map) && map.getSource(feature.source)) map.setFeatureState(feature, { hover: -1, ring: 1 });
     };
     const holdSaleHover = (id: number) => {
       if (hovering.current?.id === id) return;
@@ -664,7 +689,7 @@ export function App() {
           return;
         }
         const t = (now - since) / 1000;
-        map.setFeatureState({ source: "sales", id }, { hover: t, ring: (t % 1.1) / 1.1 });
+        map.setFeatureState(featureOf(id), { hover: t, ring: (t % 1.1) / 1.1 });
         state.frame = requestAnimationFrame(ping);
       };
       state.frame = requestAnimationFrame(ping);
@@ -725,7 +750,7 @@ export function App() {
       }
       if (tipFor.current !== hit.id) {
         tipFor.current = hit.id;
-        setSaleTip({ price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address });
+        setSaleTip({ price: hit.price, beds: hit.beds, sqft: hit.sqft, kind: hit.kind, address: hit.address, when: hit.when, status: hit.status });
       }
     };
     const onLeave = () => {
@@ -1014,6 +1039,9 @@ export function App() {
 
           {saleTip && (
             <div ref={tipNode} className="sale-tip" style={{ left: tipAt.current.x, top: tipAt.current.y }} role="tooltip">
+              <div className={`sale-tip-status ${saleTip.status === "sold" ? "is-sold" : "is-sale"}`}>
+                {saleTip.status === "sold" ? "Sold" : "For sale"} · {saleTip.when}
+              </div>
               <div className="sale-tip-price">{money(saleTip.price)}</div>
               {saleTip.address && <div className="sale-tip-address">{saleTip.address}</div>}
               <div className="sale-tip-meta">
@@ -1042,7 +1070,7 @@ export function App() {
               </button>
             ))}
           </nav>
-          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={DIVE_MS} onExit={exitExplore} sales={sales3d} />}
+          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={DIVE_MS} onExit={exitExplore} sales={sales3d} groundAt={groundAt} />}
         </>
       )}
     </>

@@ -13,6 +13,7 @@ type OpacityTarget = Record<string, unknown>;
  */
 const TARGETS: Record<string, OpacityTarget> = {
   sales: { "circle-opacity": 0.92, "circle-stroke-opacity": 0.9 },
+  active: { "circle-opacity": 0.95, "circle-stroke-opacity": 1 },
   "sales-heat": { "heatmap-opacity": 0.78 },
   "routes-casing": { "line-opacity": 0.8 },
   routes: { "line-opacity": 1 },
@@ -288,6 +289,47 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
       "circle-stroke-color": priceColor,
       "circle-stroke-width": 1.5,
       "circle-stroke-opacity": ["interpolate", ["linear"], ["coalesce", ["feature-state", "age"], 9], 0, 0.95, PULSE, 0],
+      "circle-pitch-alignment": "map",
+    },
+  } as unknown as maplibregl.LayerSpecification);
+
+  // Homes for sale now: coral dots with a white ring, on from the start (no timeline), hover ping of their own.
+  const activeSource: GeoJsonFeatureCollection = {
+    type: "FeatureCollection",
+    features: (data.active ?? []).map(([lon, lat, price, sqft, kind, beds, monthsAgo, listing, address], i) => ({
+      type: "Feature",
+      id: i,
+      properties: { price, sqft, kind, beds, monthsAgo, listing: listing ?? "", address: address ?? "" },
+      geometry: { type: "Point", coordinates: [lon, lat] },
+    })),
+  };
+  map.addSource("active", { type: "geojson", data: activeSource });
+  const activeRadius = ["interpolate", ["linear"], ["zoom"], 12, ["*", 3, swell], 14, ["*", 4.6, swell], 16, ["*", 8.5, swell]];
+  map.addLayer({
+    id: "active",
+    type: "circle",
+    source: "active",
+    paint: withTransitions(
+      {
+        "circle-radius": activeRadius,
+        "circle-color": "#fb7185",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": ["case", hovered, 2.6, 1.4],
+        "circle-pitch-alignment": "map",
+      },
+      TARGETS.active,
+    ),
+  } as maplibregl.LayerSpecification);
+  map.addLayer({
+    id: "active-hover",
+    type: "circle",
+    source: "active",
+    paint: {
+      "circle-radius": ["interpolate", ["linear"], ring, 0, 5, 1, 28],
+      "circle-color": "rgba(0, 0, 0, 0)",
+      "circle-stroke-color": "#fb7185",
+      "circle-stroke-width": ["interpolate", ["linear"], ring, 0, 2.5, 1, 1],
+      "circle-stroke-opacity": ["interpolate", ["linear"], ring, 0, 0.95, 0.7, 0.35, 1, 0],
       "circle-pitch-alignment": "map",
     },
   } as unknown as maplibregl.LayerSpecification);

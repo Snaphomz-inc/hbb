@@ -72,6 +72,12 @@ export type Neighborhood = {
   };
   /** [lon, lat, price, sqft, kind (0 house, 1 condo, 2 other), beds, monthsAgo, listingId ("" when unknown), street address] */
   sales: Array<[number, number, number, number, number, number, number, string, string]>;
+  /**
+   * Homes for sale right now, in the same shape as `sales`; the seventh field is months before the
+   * end of the sales window the home was listed (negative when listed after it). Absent until the
+   * neighborhood has been refreshed by scripts/fetch_active_listings.py.
+   */
+  active?: Array<[number, number, number, number, number, number, number, string, string]>;
   schools: School[];
   zones: FeatureCollection | null;
   permits: {

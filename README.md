@@ -168,3 +168,7 @@ frames inside After Effects and has no interactive or web output.
   boards; a few closings are mis-geocoded and are trimmed by a percentile box.
 - The extruded buildings are OpenStreetMap footprints with estimated heights, not
   photogrammetry; the satellite base is 2D imagery on terrain.
+
+## Homes for sale
+
+`scripts/fetch_active_listings.py` adds the homes currently for sale to each neighborhood file (`active`, same tuple shape as `sales`) from RealEstateAPI's MLSSearch, the feed behind the main site's listing search. It needs `REAPI_API_KEY` in `.env`. The story draws them as coral dots with a white ring in the Homes and closing chapters, the hover card says "For sale" with the month listed, and Google 3D pins them in coral. Glendale carries a sample pulled from the live site on 2026-11-10 until the key is in place.

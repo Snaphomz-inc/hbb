@@ -5,7 +5,20 @@ import { listingUrl } from "../links";
 import { screenPoint } from "../map/MapScene";
 
 /** A sale whose card is shown without a hover, to show that the dots are links. */
-export type Teaser = { id: number; lon: number; lat: number; price: number; beds: number; sqft: number; kind: number; listing: string; address: string };
+export type Teaser = {
+  id: number;
+  lon: number;
+  lat: number;
+  price: number;
+  beds: number;
+  sqft: number;
+  kind: number;
+  listing: string;
+  address: string;
+  /** "Apr 2026": the month it closed (sold) or was listed (for sale). */
+  when: string;
+  status: "sold" | "for sale";
+};
 
 type Placed = Teaser & { onScreen: boolean };
 
@@ -79,6 +92,9 @@ export function SaleTeasers({ map, teasers, spots }: { map: maplibregl.Map; teas
       {placed.map((teaser) => {
         const card = (
           <>
+            <div className={`sale-tip-status ${teaser.status === "sold" ? "is-sold" : "is-sale"}`}>
+              {teaser.status === "sold" ? "Sold" : "For sale"} · {teaser.when}
+            </div>
             <div className="sale-tip-price">{money(teaser.price)}</div>
             {teaser.address && <div className="sale-tip-address">{teaser.address}</div>}
             <div className="sale-tip-meta">

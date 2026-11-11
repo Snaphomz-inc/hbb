@@ -622,6 +622,12 @@ select {
   opacity: 0.8;
 }
 
+/* A dot with the white ring the for-sale dots wear. */
+.swatch-ring {
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px #fff;
+}
+
 .swatch-line {
   height: 0;
   width: 14px;
@@ -1329,6 +1335,19 @@ button.label-card:hover {
   border-color: var(--lime);
 }
 
+.sale-tip-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 2px;
+}
+
+.sale-tip-status.is-sale {
+  color: var(--red);
+}
+
 .sale-tip-price {
   font-weight: 600;
   font-size: 17px;
@@ -1518,62 +1537,27 @@ button.label-card:hover {
   border-color: var(--lime);
 }
 
-/* The card Google's popover bubble (dark) carries over a clicked pin. */
-.pin-card {
-  min-width: 190px;
-  padding: 2px 2px 0;
-  font-family: var(--font);
-  color: #fff;
-  text-align: left;
+/* The card over a Google 3D pin: the story's hover card, placed by the pin layer every frame. */
+.pin-tip {
+  display: none;
+  left: 0;
+  top: 0;
+  z-index: 41;
+  will-change: transform;
 }
 
-.pin-card-status {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.72);
+.pin-tip.show {
+  display: block;
 }
 
-.pin-card-status.is-sale {
-  color: var(--red);
+/* After a tap (no hover) the card stays and its link can be used. */
+.pin-tip.pinned {
+  pointer-events: auto;
 }
 
-.pin-card-price {
-  margin-top: 2px;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.pin-card-address {
-  margin-top: 2px;
-  font-size: 13px;
-}
-
-.pin-card-meta {
-  margin-top: 2px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.pin-card-link {
-  display: inline-block;
-  margin-top: 8px;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink);
-  background: var(--lime);
-  border-radius: 999px;
-  padding: 6px 10px;
+.pin-tip a.sale-tip-hint {
+  display: block;
   text-decoration: none;
-}
-
-.pin-card-link:hover {
-  background: #e6fb86;
 }
 
 .explore-hint-pin {
@@ -1585,6 +1569,10 @@ button.label-card:hover {
   border: 1px solid var(--ink);
   vertical-align: -1px;
   margin-right: 2px;
+}
+
+.explore-hint-pin.is-sale {
+  background: var(--red);
 }
 
 .explore-hint {
