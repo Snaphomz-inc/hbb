@@ -186,24 +186,25 @@ select {
 .progress {
   position: fixed;
   right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 84px;
+  bottom: 24px;
   z-index: 20;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px 10px 14px;
+  gap: 3px;
+  padding: 14px 12px 14px 14px;
   background: var(--panel-strong);
   border: 1px solid var(--line);
   border-radius: 14px;
 }
 
 .progress-seg {
+  flex: 1 1 0;
   display: grid;
   grid-template-columns: auto 5px;
   gap: 10px;
   align-items: stretch;
-  height: 32px;
+  min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1517,6 +1518,64 @@ button.label-card:hover {
   border-color: var(--lime);
 }
 
+/* The card Google's popover bubble (dark) carries over a clicked pin. */
+.pin-card {
+  min-width: 190px;
+  padding: 2px 2px 0;
+  font-family: var(--font);
+  color: #fff;
+  text-align: left;
+}
+
+.pin-card-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.pin-card-status.is-sale {
+  color: var(--red);
+}
+
+.pin-card-price {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.pin-card-address {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
+.pin-card-meta {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pin-card-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--lime);
+  border-radius: 999px;
+  padding: 6px 10px;
+  text-decoration: none;
+}
+
+.pin-card-link:hover {
+  background: #e6fb86;
+}
+
 .explore-hint-pin {
   display: inline-block;
   width: 10px;
@@ -1586,7 +1645,6 @@ html.exploring .labels {
     left: 16px;
     right: 16px;
     bottom: 54px;
-    transform: none;
     flex-direction: row;
     padding: 8px 10px;
     gap: 5px;

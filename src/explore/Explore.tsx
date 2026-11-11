@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { saleKindName } from "../components/SaleTeasers";
 import { money } from "../lib/format";
 import { listingUrl } from "../links";
 
@@ -90,10 +91,56 @@ export function preloadMaps3d(): void {
 
 type Map3D = HTMLElement & GoogleCamera;
 
-/** A sold home to pin on the mesh; the ones with a listing open it on click. */
-export type Sale3D = { id: number; lon: number; lat: number; price: number; listing: string; address: string };
+/**
+ * A home to pin on the mesh. Today every pin is a closed sale; `status` is here so active listings
+ * can ride the same way (a different colour and card line) once a feed of them exists.
+ */
+export type Sale3D = {
+  id: number;
+  lon: number;
+  lat: number;
+  price: number;
+  listing: string;
+  address: string;
+  beds: number;
+  sqft: number;
+  kind: number;
+  /** "Apr 2026": the month it closed (sold) or was listed (for sale). */
+  when: string;
+  status: "sold" | "for sale";
+};
 
 type Marker3D = HTMLElement & { position: { lat: number; lng: number; altitude: number } };
+type Popover3D = HTMLElement & { open: boolean; positionAnchor: unknown };
+
+const PIN_COLOURS: Record<Sale3D["status"], string> = { sold: "#dcf763", "for sale": "#fb7185" };
+
+function el(className: string, text: string): HTMLElement {
+  const node = document.createElement("div");
+  node.className = className;
+  node.textContent = text;
+  return node;
+}
+
+/** The card a pin opens: status and month, price, address, the facts, and the listing when there is one. */
+function saleCard(sale: Sale3D): HTMLElement {
+  const card = el("pin-card", "");
+  card.append(el(`pin-card-status is-${sale.status === "sold" ? "sold" : "sale"}`, sale.status === "sold" ? `Sold · ${sale.when}` : `For sale · ${sale.when}`));
+  card.append(el("pin-card-price", money(sale.price)));
+  if (sale.address) card.append(el("pin-card-address", sale.address));
+  const facts = [sale.beds > 0 ? `${sale.beds} bd` : "", sale.sqft > 0 ? `${sale.sqft.toLocaleString()} sqft` : "", saleKindName(sale.kind)].filter(Boolean);
+  card.append(el("pin-card-meta", facts.join(" · ")));
+  if (sale.listing) {
+    const link = document.createElement("a");
+    link.className = "pin-card-link";
+    link.href = listingUrl(sale.listing);
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = "Open the listing on Snaphomz ↗";
+    card.append(link);
+  }
+  return card;
+}
 
 /** How many pins ride on the mesh at once: the nearest to wherever the camera is looking. */
 const PIN_LIMIT = 160;
@@ -105,17 +152,33 @@ function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lon: n
 }
 
 /**
- * The sold homes as pins on Google's mesh, each labelled with its price; a pin with a listing opens
- * it. Only the nearest PIN_LIMIT to the camera's centre are on the map, and the set is refreshed
- * every time the camera comes to rest somewhere else.
+ * The homes as pins on Google's mesh, each labelled with its price. Google's 3D markers only report
+ * clicks (there is no hover), so a click opens a card over the pin, with the listing link inside;
+ * a click on the same pin, or on the map, closes it. Only the nearest PIN_LIMIT to the camera's
+ * centre are on the map, and the set is refreshed every time the camera comes to rest somewhere else.
  */
 async function pinSales(map3d: Map3D, lib: Record<string, unknown>, sales: Sale3D[], alive: () => boolean): Promise<void> {
   if (sales.length === 0 || !window.google) return;
   const Marker = lib.Marker3DInteractiveElement as new (options: Record<string, unknown>) => Marker3D;
+  const Popover = lib.PopoverElement as new (options: Record<string, unknown>) => Popover3D;
   const AltitudeMode = lib.AltitudeMode as Record<string, string>;
   const markerLib = await window.google.maps.importLibrary("marker");
   const PinElement = markerLib.PinElement as new (options: Record<string, unknown>) => HTMLElement;
   if (!alive()) return;
+  const onMesh = AltitudeMode.RELATIVE_TO_MESH ?? AltitudeMode.CLAMP_TO_GROUND;
+  // One card for all the pins: it moves to whichever pin was clicked last.
+  const popover = new Popover({ open: false, altitudeMode: onMesh });
+  map3d.append(popover);
+  let openFor = -1;
+  let pinClickAt = 0;
+  const close = () => {
+    popover.open = false;
+    openFor = -1;
+  };
+  // A pin's click reaches the map too, after the pin; a click that was not on a pin closes the card.
+  map3d.addEventListener("gmp-click", () => {
+    if (performance.now() - pinClickAt > 100) close();
+  });
   const shown = new Map<number, Marker3D>();
   let lastCentre: { lat: number; lng: number } | null = null;
   const refresh = () => {
@@ -130,6 +193,7 @@ async function pinSales(map3d: Map3D, lib: Record<string, unknown>, sales: Sale3
     const keep = new Set(nearest.map((n) => n.sale.id));
     for (const [id, marker] of shown) {
       if (!keep.has(id)) {
+        if (openFor === id) close();
         marker.remove();
         shown.delete(id);
       }
@@ -138,12 +202,20 @@ async function pinSales(map3d: Map3D, lib: Record<string, unknown>, sales: Sale3
       if (shown.has(sale.id)) continue;
       const marker = new Marker({
         position: { lat: sale.lat, lng: sale.lon, altitude: 0 },
-        altitudeMode: AltitudeMode.RELATIVE_TO_MESH ?? AltitudeMode.CLAMP_TO_GROUND,
+        altitudeMode: onMesh,
         label: money(sale.price),
         extruded: false,
       });
-      marker.append(new PinElement({ background: sale.listing ? "#dcf763" : "#94a3b8", borderColor: "#111827", glyphColor: "#111827", scale: 0.85 }));
-      if (sale.listing) marker.addEventListener("gmp-click", () => window.open(listingUrl(sale.listing), "_blank", "noopener"));
+      marker.append(new PinElement({ background: PIN_COLOURS[sale.status], borderColor: "#111827", glyphColor: "#111827", scale: 0.85 }));
+      marker.addEventListener("gmp-click", () => {
+        pinClickAt = performance.now();
+        if (openFor === sale.id) return close();
+        popover.open = false;
+        popover.positionAnchor = marker;
+        popover.replaceChildren(saleCard(sale));
+        popover.open = true;
+        openFor = sale.id;
+      });
       map3d.append(marker);
       shown.set(sale.id, marker);
     }
@@ -255,7 +327,7 @@ export function Explore({
       <div className="explore-hint">
         {sales.length > 0 ? (
           <>
-            <span className="explore-hint-pin" aria-hidden="true" /> sold in the last year, click for the listing · scroll to zoom · drag to look around · esc to return
+            <span className="explore-hint-pin" aria-hidden="true" /> sold in the last year, click a pin for its card · scroll to zoom · drag to look around · esc to return
           </>
         ) : (
           "scroll to zoom · drag to look around · esc to return"

@@ -3,7 +3,7 @@ import { LngLat } from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Labels } from "./components/Labels";
 import { Neighbors } from "./components/Neighbors";
-import { Explore, exploreAvailable, preloadMaps3d, type ViewCamera } from "./explore/Explore";
+import { Explore, exploreAvailable, preloadMaps3d, type Sale3D, type ViewCamera } from "./explore/Explore";
 import { Overview } from "./Overview";
 import { distanceM, zoomToFit } from "./lib/geo";
 import { money } from "./lib/format";
@@ -425,11 +425,25 @@ export function App() {
   chapterRef.current = chapter;
   const dataRef = useRef(data);
   dataRef.current = data;
-  /** The sold homes as Google 3D pins: id, point, price and the listing it opens. */
-  const sales3d = useMemo(
-    () => (data ? data.sales.map((s, id) => ({ id, lon: s[0], lat: s[1], price: s[2], listing: s[7] ?? "", address: s[8] ?? "" })) : []),
-    [data],
-  );
+  /** The sold homes as Google 3D pins, with what their card says. */
+  const sales3d = useMemo<Sale3D[]>(() => {
+    if (!data) return [];
+    const [endYear, endMonth] = data.market.window.to.split("-").map(Number);
+    const monthOf = (monthsAgo: number) => new Date(endYear, endMonth - 1 - monthsAgo, 1).toLocaleString("en-US", { month: "short", year: "numeric" });
+    return data.sales.map((s, id) => ({
+      id,
+      lon: s[0],
+      lat: s[1],
+      price: s[2],
+      sqft: s[3],
+      kind: s[4],
+      beds: s[5],
+      when: monthOf(s[6]),
+      listing: s[7] ?? "",
+      address: s[8] ?? "",
+      status: "sold" as const,
+    }));
+  }, [data]);
 
   const enterFree = () => {
     if (free.current || !map || !mapAlive(map)) return;
