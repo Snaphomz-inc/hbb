@@ -5,13 +5,17 @@ import type { Label } from "../story/chapters";
 
 type Placed = Label & { lift: number; onScreen: boolean; flip: boolean; shift: number };
 
-const CARD_HEIGHT = 46;
-const STEM = 34;
-const LIFT_STEP = 52;
+const STEM = 40;
+const LIFT_STEP = 60;
 
-function cardWidth(label: Label): number {
-  const longest = Math.max(label.title.length * 7.2, (label.value ?? "").length * 7.6);
-  return longest + 26;
+/** The card's size follows its type: 12 px mono title, 17 px value, and the 3D line when the card is a button. */
+function cardHeight(pickable: boolean): number {
+  return pickable ? 78 : 60;
+}
+
+function cardWidth(label: Label, pickable: boolean): number {
+  const longest = Math.max(label.title.length * 7.6, (label.value ?? "").length * 9.4, pickable ? 150 : 0);
+  return longest + 30;
 }
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -30,7 +34,9 @@ function overlaps(a: Rect, b: Rect): boolean {
  * MapLibre's own markers do it, so they never fall behind a drag or a wheel zoom.
  * React only renders when something other than a position changes.
  */
-export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: Label[]; visible: boolean }) {
+export function Labels({ map, labels, visible, onPick }: { map: maplibregl.Map; labels: Label[]; visible: boolean; onPick?: (label: Label) => void }) {
+  const pickable = Boolean(onPick);
+  const CARD_HEIGHT = cardHeight(pickable);
   const [placed, setPlaced] = useState<Placed[]>([]);
   const nodes = useRef(new Map<string, HTMLElement>());
   const positions = useRef(new Map<string, { x: number; y: number }>());
@@ -81,7 +87,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
         let shift = 0;
         let rect: Rect | null = null;
         if (inView) {
-          const w = Math.min(cardWidth(label), wide ? Infinity : 200);
+          const w = Math.min(cardWidth(label, pickable), wide ? Infinity : 220);
           // A card that would run off the right edge hangs to the left of its stem instead, and one that
           // would still run off an edge slides along the stem's top until it fits.
           flip = point.x + 6 + w > width - 12;
@@ -119,7 +125,7 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
       map.off("move", update);
       map.off("resize", update);
     };
-  }, [map, labels]);
+  }, [map, labels, pickable]);
 
   return (
     <div className="labels" aria-hidden={!visible}>
@@ -139,10 +145,18 @@ export function Labels({ map, labels, visible }: { map: maplibregl.Map; labels: 
         >
           <span className="label-dot" />
           <span className="label-stem" />
-          <span className="label-card">
-            <span className="label-title">{label.title}</span>
-            {label.value && <span className="label-value">{label.value}</span>}
-          </span>
+          {onPick ? (
+            <button type="button" className="label-card" onClick={() => onPick(label)} title="Open Google 3D here">
+              <span className="label-title">{label.title}</span>
+              {label.value && <span className="label-value">{label.value}</span>}
+              <span className="label-go">look around in 3D →</span>
+            </button>
+          ) : (
+            <span className="label-card">
+              <span className="label-title">{label.title}</span>
+              {label.value && <span className="label-value">{label.value}</span>}
+            </span>
+          )}
         </div>
       ))}
     </div>

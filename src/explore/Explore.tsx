@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { money } from "../lib/format";
+import { listingUrl } from "../links";
 
 /**
  * The look-around view: Google's photorealistic 3D mesh, opened on exactly the camera the
@@ -88,11 +90,87 @@ export function preloadMaps3d(): void {
 
 type Map3D = HTMLElement & GoogleCamera;
 
+/** A sold home to pin on the mesh; the ones with a listing open it on click. */
+export type Sale3D = { id: number; lon: number; lat: number; price: number; listing: string; address: string };
+
+type Marker3D = HTMLElement & { position: { lat: number; lng: number; altitude: number } };
+
+/** How many pins ride on the mesh at once: the nearest to wherever the camera is looking. */
+const PIN_LIMIT = 160;
+
+function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lon: number }): number {
+  const dx = (b.lon - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+  const dy = (b.lat - a.lat) * 110540;
+  return Math.hypot(dx, dy);
+}
+
+/**
+ * The sold homes as pins on Google's mesh, each labelled with its price; a pin with a listing opens
+ * it. Only the nearest PIN_LIMIT to the camera's centre are on the map, and the set is refreshed
+ * every time the camera comes to rest somewhere else.
+ */
+async function pinSales(map3d: Map3D, lib: Record<string, unknown>, sales: Sale3D[], alive: () => boolean): Promise<void> {
+  if (sales.length === 0 || !window.google) return;
+  const Marker = lib.Marker3DInteractiveElement as new (options: Record<string, unknown>) => Marker3D;
+  const AltitudeMode = lib.AltitudeMode as Record<string, string>;
+  const markerLib = await window.google.maps.importLibrary("marker");
+  const PinElement = markerLib.PinElement as new (options: Record<string, unknown>) => HTMLElement;
+  if (!alive()) return;
+  const shown = new Map<number, Marker3D>();
+  let lastCentre: { lat: number; lng: number } | null = null;
+  const refresh = () => {
+    const centre = map3d.center;
+    if (!alive() || !centre) return;
+    if (lastCentre && metresBetween(lastCentre, { lat: centre.lat, lon: centre.lng }) < 150 && shown.size > 0) return;
+    lastCentre = { lat: centre.lat, lng: centre.lng };
+    const nearest = sales
+      .map((sale) => ({ sale, d: metresBetween(centre, sale) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, PIN_LIMIT);
+    const keep = new Set(nearest.map((n) => n.sale.id));
+    for (const [id, marker] of shown) {
+      if (!keep.has(id)) {
+        marker.remove();
+        shown.delete(id);
+      }
+    }
+    for (const { sale } of nearest) {
+      if (shown.has(sale.id)) continue;
+      const marker = new Marker({
+        position: { lat: sale.lat, lng: sale.lon, altitude: 0 },
+        altitudeMode: AltitudeMode.RELATIVE_TO_MESH ?? AltitudeMode.CLAMP_TO_GROUND,
+        label: money(sale.price),
+        extruded: false,
+      });
+      marker.append(new PinElement({ background: sale.listing ? "#dcf763" : "#94a3b8", borderColor: "#111827", glyphColor: "#111827", scale: 0.85 }));
+      if (sale.listing) marker.addEventListener("gmp-click", () => window.open(listingUrl(sale.listing), "_blank", "noopener"));
+      map3d.append(marker);
+      shown.set(sale.id, marker);
+    }
+  };
+  refresh();
+  map3d.addEventListener("gmp-steadychange", (event) => {
+    if ((event as Event & { isSteady?: boolean }).isSteady) refresh();
+  });
+}
+
 /**
  * `getCamera` is read twice: when Google is created, and again the moment its mesh is ready, so the
  * story view can keep drifting underneath while tiles load and the crossfade still lines up.
  */
-export function Explore({ getCamera, closing, minWait = 0, onExit }: { getCamera: () => ViewCamera; closing: boolean; minWait?: number; onExit: (camera: ViewCamera) => void }) {
+export function Explore({
+  getCamera,
+  closing,
+  minWait = 0,
+  onExit,
+  sales = [],
+}: {
+  getCamera: () => ViewCamera;
+  closing: boolean;
+  minWait?: number;
+  onExit: (camera: ViewCamera) => void;
+  sales?: Sale3D[];
+}) {
   const host = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Map3D | null>(null);
   const opened = useRef<ViewCamera>(getCamera());
@@ -110,6 +188,7 @@ export function Explore({ getCamera, closing, minWait = 0, onExit }: { getCamera
         const map3d = new Map3DElement({ ...toGoogle(opened.current, height), mode: MapMode.HYBRID, defaultUIDisabled: true, gestureHandling: "GREEDY" });
         mapRef.current = map3d;
         host.current.append(map3d);
+        pinSales(map3d, lib, sales, () => alive).catch(() => undefined);
         let shown = false;
         const show = () => {
           if (shown || !alive) return;
@@ -173,7 +252,15 @@ export function Explore({ getCamera, closing, minWait = 0, onExit }: { getCamera
       <button className="explore-exit" onClick={exit}>
         Back to the story
       </button>
-      <div className="explore-hint">scroll to zoom · drag to look around · esc to return</div>
+      <div className="explore-hint">
+        {sales.length > 0 ? (
+          <>
+            <span className="explore-hint-pin" aria-hidden="true" /> sold in the last year, click for the listing · scroll to zoom · drag to look around · esc to return
+          </>
+        ) : (
+          "scroll to zoom · drag to look around · esc to return"
+        )}
+      </div>
     </div>
   );
 }

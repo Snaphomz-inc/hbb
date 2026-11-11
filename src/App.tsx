@@ -425,6 +425,11 @@ export function App() {
   chapterRef.current = chapter;
   const dataRef = useRef(data);
   dataRef.current = data;
+  /** The sold homes as Google 3D pins: id, point, price and the listing it opens. */
+  const sales3d = useMemo(
+    () => (data ? data.sales.map((s, id) => ({ id, lon: s[0], lat: s[1], price: s[2], listing: s[7] ?? "", address: s[8] ?? "" })) : []),
+    [data],
+  );
 
   const enterFree = () => {
     if (free.current || !map || !mapAlive(map)) return;
@@ -474,6 +479,21 @@ export function App() {
       at: performance.now(),
       ms: 1500,
     };
+  };
+
+  /** Fly down to a point on the map and open Google 3D on it, so the area around it can be checked up close. */
+  const lookAt = (at: { lon: number; lat: number }) => {
+    if (!map || !mapAlive(map) || explore !== "off") return;
+    enterFree();
+    const ground = map.queryTerrainElevation([at.lon, at.lat]) ?? 0;
+    const ms = 1300;
+    flight.current = {
+      from: readCamera(),
+      to: { center: [at.lon, at.lat], zoom: Math.max(map.getZoom(), 16.4), pitch: 60, bearing: map.getBearing(), altitude: 0, elevation: ground },
+      at: performance.now(),
+      ms,
+    };
+    window.setTimeout(() => enterExploreRef.current(), ms + 50);
   };
 
   /**
@@ -855,7 +875,9 @@ export function App() {
       <header className="top">
         <a className="wordmark" href="#/" aria-label="Snaphomz" onClick={(event) => { event.preventDefault(); pick(""); }} dangerouslySetInnerHTML={{ __html: logoSvg }} />
         <div className="top-right">
-          <span className="poc" title={`build ${build}`}>{city.name} neighborhoods</span>
+          <span className="poc" title={`build ${build}`}>
+            {chapter?.kind === "story" && !freeLook && explore === "off" ? "drag to look around · ctrl + scroll zooms" : `${city.name} neighborhoods`}
+          </span>
           <select className="select" value={slug} onChange={(event) => pick(event.target.value)} aria-label="Neighborhood">
             <option value="">All of {city.name}</option>
             {index.length === 0 && slug && <option value={slug}>{data?.name ?? slug}</option>}
@@ -869,6 +891,16 @@ export function App() {
               </optgroup>
             ))}
           </select>
+          {data && (
+            <button type="button" className={`tour-back ${freeLook && explore === "off" ? "show" : ""}`} onClick={leaveFree}>
+              <span aria-hidden="true">↩</span> back to the tour
+            </button>
+          )}
+          {data && exploreAvailable && (
+            <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
+              <span className="look-around-icon" aria-hidden="true">⤢</span>look around
+            </button>
+          )}
         </div>
       </header>
 
@@ -894,7 +926,7 @@ export function App() {
 
       {!overview && data && chapter && map && (
         <>
-          <Labels map={map} labels={chapter.labels} visible={chapter.kind === "story" && settled} />
+          <Labels map={map} labels={chapter.labels} visible={chapter.kind === "story" && settled} onPick={exploreAvailable ? lookAt : undefined} />
           <Neighbors
             map={map}
             index={index}
@@ -933,6 +965,7 @@ export function App() {
                 </div>
               )}
               {chapter.timeline && <Timeline buckets={chapter.timeline} tick={tick} />}
+              {chapter.question && <Question text={chapter.question} />}
             </div>
             <aside className="stats" key={chapter.id}>
               {chapter.stats.map((stat, i) => (
@@ -961,11 +994,7 @@ export function App() {
             <NeighborhoodChips index={index} current={slug} onPick={hop} title="Next door" />
           </div>
 
-          <div className={`question-wrap ${chapter.kind === "story" ? "show" : ""}`}>
-            {chapter.question && <Question text={chapter.question} />}
-          </div>
-
-          <div className={`scroll-hint ${position.overall < 0.97 && !freeLook ? "show" : ""}`}>
+          <div className={`scroll-hint ${chapter.kind === "hero" && !freeLook ? "show" : ""}`}>
             scroll <span className="arrow">↓</span>
           </div>
 
@@ -982,37 +1011,24 @@ export function App() {
             </div>
           )}
           {map && mapAlive(map) && teasers.length > 0 && explore === "off" && <SaleTeasers map={map} teasers={teasers} spots={teaserSpots} />}
-          {/* The bottom-right dock: free-look controls, look-around and the chapter rail in one row. */}
-          <div className="dock">
-            <button type="button" className={`tour-back ${freeLook && explore === "off" ? "show" : ""}`} onClick={leaveFree}>
-              <span aria-hidden="true">↩</span> back to the tour
-            </button>
-            <div className={`free-hint ${!freeLook && explore === "off" && chapter.kind !== "hero" ? "show" : ""}`} aria-hidden="true">
-              drag to look around · ctrl + scroll zooms
-            </div>
-            {exploreAvailable && (
-              <button className={`look-around ${explore === "off" ? "show" : ""}`} onClick={enterExplore} title="Open this view in Google 3D and move around freely">
-                <span className="look-around-icon" aria-hidden="true">⤢</span>look around
+          {/* The chapter rail: a column of named marks against the right edge, each a way to its chapter. */}
+          <nav className="progress" aria-label="Chapters">
+            {chapters.map((c, i) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`progress-seg ${i === position.active ? "is-on" : ""}`}
+                onClick={() => goToChapter(i)}
+                title={chapterName(c)}
+              >
+                <span className="progress-name">{chapterName(c)}</span>
+                <span className="progress-track">
+                  <span className="progress-fill" style={{ ["--p" as string]: i < position.active ? 1 : i === position.active ? position.progress : 0 }} />
+                </span>
               </button>
-            )}
-            <nav className="progress" aria-label="Chapters">
-              {chapters.map((c, i) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`progress-seg ${i === position.active ? "is-on" : ""}`}
-                  onClick={() => goToChapter(i)}
-                  title={chapterName(c)}
-                >
-                  <span className="progress-name">{chapterName(c)}</span>
-                  <span className="progress-track">
-                    <span className="progress-fill" style={{ transform: `scaleX(${i < position.active ? 1 : i === position.active ? position.progress : 0})` }} />
-                  </span>
-                </button>
-              ))}
-            </nav>
-          </div>
-          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={DIVE_MS} onExit={exitExplore} />}
+            ))}
+          </nav>
+          {explore !== "off" && <Explore getCamera={readCamera} closing={explore === "closing"} minWait={DIVE_MS} onExit={exitExplore} sales={sales3d} />}
         </>
       )}
     </>

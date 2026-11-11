@@ -97,7 +97,7 @@ export function Neighbors({
       const now = performance.now();
       if (now - measuredAt > 250) {
         measuredAt = now;
-        blocked = [...document.querySelectorAll(".hero.show > *, .story.show > *, .closing.show > *, .question-wrap.show > *")]
+        blocked = [...document.querySelectorAll(".hero.show > *, .story.show > *, .closing.show > *, .progress")]
           .map((element) => element.getBoundingClientRect())
           .filter((r) => r.width > 0 && r.height > 0)
           .map((r) => ({ x0: r.left - 6, y0: r.top - 6, x1: r.right + 6, y1: r.bottom + 6 }));

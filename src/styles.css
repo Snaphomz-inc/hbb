@@ -133,7 +133,7 @@ select {
 .top-right {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .poc {
@@ -181,40 +181,29 @@ select {
   color: rgba(255, 255, 255, 0.8);
 }
 
-/* The bottom-right dock: the way into and out of free look, the look-around button and the chapter
-   rail sit in one row against the right edge, so the middle of the screen stays clear for the map. */
-.dock {
+/* The chapter rail: a column of named marks against the right edge, vertically centred, each a
+   button that flies to its chapter. The bottom of the screen stays clear. */
+.progress {
   position: fixed;
-  right: 28px;
-  bottom: 16px;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 20;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.dock > * {
-  pointer-events: auto;
-}
-
-/* The chapter rail: a floating bar of named marks, each a button that flies to its chapter. */
-.progress {
-  width: min(600px, calc(100vw - 56px));
-  display: flex;
-  gap: 8px;
-  padding: 10px 14px 11px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 10px 14px;
   background: var(--panel-strong);
   border: 1px solid var(--line);
   border-radius: 14px;
 }
 
 .progress-seg {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 5px;
+  gap: 10px;
+  align-items: stretch;
+  height: 32px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -234,39 +223,38 @@ select {
 }
 
 .progress-name {
+  align-self: center;
+  text-align: right;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .progress-track {
   position: relative;
   display: block;
-  height: 4px;
-  border-radius: 2px;
+  border-radius: 3px;
   background: rgba(255, 255, 255, 0.2);
   overflow: hidden;
-  transition: height 150ms;
+  transition: background 150ms;
 }
 
 .progress-seg:hover .progress-track {
-  height: 6px;
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .progress-fill {
   position: absolute;
   inset: 0;
   background: var(--lime);
-  transform-origin: left;
+  transform-origin: top;
+  transform: scaleY(var(--p, 0));
   transition: transform 120ms linear;
 }
 
-/* Free look: the way in is written beside the look-around button; the way back takes its place. */
-.free-hint,
+/* Free look: the way in is written in the header's label slot; the way back is a chip beside the dropdown. */
 .tour-back {
   display: none;
   font-family: var(--mono);
@@ -278,7 +266,7 @@ select {
   background: var(--panel-strong);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 8px 13px;
+  padding: 10px 14px;
   transition: border-color 200ms, color 200ms;
   animation: fade-in 400ms ease;
 }
@@ -292,10 +280,6 @@ select {
   }
 }
 
-.free-hint.show {
-  display: block;
-}
-
 .tour-back {
   color: rgba(255, 255, 255, 0.95);
   cursor: pointer;
@@ -307,7 +291,8 @@ select {
 }
 
 .tour-back.show {
-  display: block;
+  display: inline-flex;
+  align-items: center;
 }
 
 .tour-back:hover {
@@ -572,7 +557,8 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 24px;
-  padding: 96px 28px 90px;
+  /* The right edge is the chapter rail's. */
+  padding: 96px 136px 90px 28px;
   align-items: start;
 }
 
@@ -806,34 +792,19 @@ select {
 
 /* ---------------------------------------------------------------- question box */
 
-.question-wrap {
-  position: fixed;
-  left: 50%;
-  bottom: 78px;
-  transform: translate(-50%, 10px);
-  z-index: 15;
-  opacity: 0;
-  transition: opacity 400ms, transform 400ms;
-  pointer-events: none;
-}
-
-.question-wrap.show {
-  opacity: 1;
-  transform: translate(-50%, 0);
-}
-
+/* The chapter's question, under the legend and timeline. */
 .question {
+  margin-top: 12px;
+  width: fit-content;
+  max-width: 560px;
   font-family: var(--mono);
   font-size: 15px;
   letter-spacing: 0.02em;
   color: #fff;
   background: var(--panel-strong);
   border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 12px 20px;
-  min-width: 360px;
-  text-align: center;
-  backdrop-filter: blur(12px);
+  border-radius: 8px;
+  padding: 10px 16px;
 }
 
 /* ---------------------------------------------------------------- labels */
@@ -860,10 +831,10 @@ select {
 
 .label-dot {
   position: absolute;
-  left: -5px;
-  top: -5px;
-  width: 10px;
-  height: 10px;
+  left: -6px;
+  top: -6px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--tone, #fff);
   box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.55), 0 0 12px var(--tone, #fff);
@@ -896,10 +867,36 @@ select {
   background: var(--panel-strong);
   border: 1px solid var(--line);
   border-left: 2px solid var(--tone, #fff);
-  border-radius: 6px;
-  padding: 7px 11px;
+  border-radius: 8px;
+  padding: 9px 13px;
   transform: translate(var(--shift, 0px), 6px);
-  transition: transform 300ms ease 180ms;
+  transition: transform 300ms ease 180ms, border-color 200ms;
+}
+
+/* A callout that opens Google 3D on its point is a button; it only takes the mouse while shown. */
+button.label-card {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.label:not(.in) .label-card {
+  pointer-events: none;
+}
+
+button.label-card:hover {
+  border-color: var(--lime);
+}
+
+.label-go {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lime);
 }
 
 .label.in .label-card {
@@ -915,14 +912,14 @@ select {
 
 .label-title {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--tone, #fff);
 }
 
 .label-value {
-  font-size: 14.5px;
+  font-size: 17px;
   font-weight: 600;
   color: #fff;
 }
@@ -1211,15 +1208,13 @@ select {
   .stat-sources {
     display: none;
   }
-  .question {
-    min-width: 0;
-    width: calc(100vw - 32px);
-    font-size: 13px;
-  }
   .label-card {
     white-space: normal;
     width: max-content;
-    max-width: 200px;
+    max-width: 220px;
+  }
+  .label-value {
+    font-size: 15px;
   }
   .sources-strip {
     display: none;
@@ -1294,7 +1289,7 @@ select {
   position: fixed;
   z-index: 15;
   transform: translate(-50%, calc(-100% - 14px));
-  padding: 8px 11px;
+  padding: 10px 13px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1335,18 +1330,18 @@ select {
 
 .sale-tip-price {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 17px;
 }
 
 .sale-tip-address {
-  font-size: 13px;
+  font-size: 14px;
   color: rgba(255, 255, 255, 0.95);
   margin-top: 2px;
 }
 
 .sale-tip-meta {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: rgba(255, 255, 255, 0.85);
   margin-top: 2px;
 }
@@ -1372,7 +1367,7 @@ select {
   background: var(--panel-strong);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 8px 13px;
+  padding: 10px 14px;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
@@ -1522,6 +1517,17 @@ select {
   border-color: var(--lime);
 }
 
+.explore-hint-pin {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+  border: 1px solid var(--ink);
+  vertical-align: -1px;
+  margin-right: 2px;
+}
+
 .explore-hint {
   position: absolute;
   bottom: 22px;
@@ -1549,24 +1555,14 @@ html.exploring .story,
 html.exploring .closing,
 html.exploring .question-wrap,
 html.exploring .scroll-hint,
-html.exploring .dock,
+html.exploring .progress,
 html.exploring .labels {
   opacity: 0 !important;
   pointer-events: none !important;
   transition: opacity 500ms ease;
 }
 
-/* Narrower desktops: the gesture hint would push the dock into the scroll hint, so it goes. */
-@media (max-width: 1240px) {
-  .free-hint {
-    display: none !important;
-  }
-}
-
 @media (max-width: 900px) {
-  .dock {
-    display: contents;
-  }
   .look-around {
     position: fixed;
     right: 46px;
@@ -1586,17 +1582,36 @@ html.exploring .labels {
     padding: 6px 10px;
   }
   .progress {
-    position: fixed;
+    top: auto;
     left: 16px;
     right: 16px;
     bottom: 54px;
-    z-index: 20;
-    width: auto;
+    transform: none;
+    flex-direction: row;
     padding: 8px 10px;
     gap: 5px;
   }
+  .progress-seg {
+    display: block;
+    flex: 1 1 0;
+    height: auto;
+  }
+  .progress-track {
+    height: 4px;
+  }
+  .progress-fill {
+    transform-origin: left;
+    transform: scaleX(var(--p, 0));
+  }
   .progress-name {
     display: none;
+  }
+  .story {
+    padding-right: 16px;
+  }
+  .question {
+    font-size: 13px;
+    max-width: 100%;
   }
 }
 
