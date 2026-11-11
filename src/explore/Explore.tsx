@@ -138,6 +138,8 @@ const CHIP_CHAR = 8;
 const CHIP_SLACK = 3;
 /** How far above the terrain model a home's roof may put its chip on the mesh, metres. */
 const MESH_SLACK_M = 10;
+/** A home geocoded onto the street still lights the lot whose edge is within this many metres. */
+const PIN_LOT_REACH = 25;
 
 function chipWidth(text: string): number {
   return CHIP_PAD + text.length * CHIP_CHAR;
@@ -320,6 +322,7 @@ async function pinSales(
       map3d.append(marker);
       shown.set(sale.id, { marker, sale, alt: (groundAt(sale.lon, sale.lat) ?? centre.altitude) + PIN_LIFT, half: chipWidth(money(sale.price)) / 2 + CHIP_SLACK });
     }
+    parcels?.ensure(nearest.map(({ sale }) => ({ lon: sale.lon, lat: sale.lat })));
   };
   refresh();
   const onSteady = (event: Event) => {
@@ -372,7 +375,7 @@ async function pinSales(
     if (lit) shown.get(lit.id)?.marker.querySelector("template")?.replaceWith(chipTemplate(lit, false));
     lit = sale;
     if (sale) shown.get(sale.id)?.marker.querySelector("template")?.replaceWith(chipTemplate(sale, true));
-    parcels?.highlight(sale ? { lon: sale.lon, lat: sale.lat } : null, sale ? PIN_COLOURS[sale.status] : undefined);
+    parcels?.highlight(sale ? { lon: sale.lon, lat: sale.lat } : null, sale ? PIN_COLOURS[sale.status] : undefined, PIN_LOT_REACH);
   };
   const show = (sale: Sale3D | null, keep: boolean) => {
     const was = pinned ?? hover;
