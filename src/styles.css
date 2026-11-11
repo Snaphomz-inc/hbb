@@ -1554,6 +1554,11 @@ button.label-card:hover {
 .pin-tip.show {
   pointer-events: auto;
   cursor: pointer;
+  transition: border-color 150ms, transform 150ms;
+}
+
+.pin-tip.show:hover {
+  border-color: var(--lime);
 }
 
 .pin-tip a.sale-tip-hint {

@@ -271,7 +271,8 @@ async function pinSales(
     const width = host.clientWidth;
     const height = host.clientHeight;
     const project = projector({ center: centre, range: map3d.range, tilt: map3d.tilt, heading: map3d.heading }, width, height);
-    // Which pin is under the pointer (none while the pointer drags the map).
+    // Which pin is under the pointer. While the button is down the hover is frozen, so a click on a
+    // pin keeps its pin through the release; a drag lets go of it below.
     if (pointer && !down) {
       let best: Sale3D | null = null;
       let bestGap = PIN_RADIUS;
@@ -285,8 +286,6 @@ async function pinSales(
         }
       }
       if (best !== hover) show(best, false);
-    } else if (hover && down) {
-      show(null, false);
     }
     // The card rides on its pin.
     const sale = pinned ?? hover;
@@ -305,6 +304,8 @@ async function pinSales(
   const onMove = (event: PointerEvent) => {
     if (event.pointerType === "touch") return;
     pointer = { x: event.clientX, y: event.clientY };
+    // A drag is not a click: once the pointer has moved, the pin it pressed on is let go.
+    if (down && hover && Math.hypot(event.clientX - down.x, event.clientY - down.y) >= 6) show(null, false);
   };
   const onLeave = (event?: PointerEvent) => {
     pointer = null;
