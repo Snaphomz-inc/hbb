@@ -1345,7 +1345,7 @@ button.label-card:hover {
 }
 
 .sale-tip-status.is-sale {
-  color: var(--red);
+  color: var(--orange);
 }
 
 .sale-tip-price {
@@ -1550,9 +1550,10 @@ button.label-card:hover {
   display: block;
 }
 
-/* After a tap (no hover) the card stays and its link can be used. */
-.pin-tip.pinned {
+/* The card takes the pointer: the whole card opens the listing, and it stays while the pointer crosses onto it. */
+.pin-tip.show {
   pointer-events: auto;
+  cursor: pointer;
 }
 
 .pin-tip a.sale-tip-hint {
@@ -1572,7 +1573,7 @@ button.label-card:hover {
 }
 
 .explore-hint-pin.is-sale {
-  background: var(--red);
+  background: var(--orange);
 }
 
 .explore-hint {

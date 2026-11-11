@@ -125,7 +125,7 @@ const PIN_LIFT = 5;
 /** The pin's head sits this far above its anchor (css px); a pointer this close to the head is on it. */
 const PIN_HEAD = 16;
 const PIN_RADIUS = 20;
-const PIN_COLOURS: Record<Sale3D["status"], string> = { sold: "#dcf763", "for sale": "#fb7185" };
+const PIN_COLOURS: Record<Sale3D["status"], string> = { sold: "#dcf763", "for sale": "#fb923c" };
 
 function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lon: number }): number {
   const dx = (b.lon - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
@@ -306,9 +306,21 @@ async function pinSales(
     if (event.pointerType === "touch") return;
     pointer = { x: event.clientX, y: event.clientY };
   };
-  const onLeave = () => {
+  const onLeave = (event?: PointerEvent) => {
     pointer = null;
+    // Leaving the map for the card is not leaving the pin.
+    if (event?.relatedTarget instanceof Node && card.contains(event.relatedTarget)) return;
     if (hover) show(null, false);
+  };
+  const onCardLeave = (event: PointerEvent) => {
+    if (event.relatedTarget instanceof Node && host.contains(event.relatedTarget)) return;
+    if (hover) show(null, false);
+  };
+  const onCardClick = (event: MouseEvent) => {
+    const sale = pinned ?? hover;
+    if (!sale?.listing) return;
+    event.preventDefault();
+    window.open(listingUrl(sale.listing), "_blank", "noopener");
   };
   const onDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
@@ -350,6 +362,8 @@ async function pinSales(
   host.addEventListener("pointerdown", onDown);
   host.addEventListener("pointerup", onUp);
   host.addEventListener("pointercancel", onLeave);
+  card.addEventListener("pointerleave", onCardLeave);
+  card.addEventListener("click", onCardClick);
 
   return {
     destroy() {
@@ -360,6 +374,8 @@ async function pinSales(
       host.removeEventListener("pointerdown", onDown);
       host.removeEventListener("pointerup", onUp);
       host.removeEventListener("pointercancel", onLeave);
+      card.removeEventListener("pointerleave", onCardLeave);
+      card.removeEventListener("click", onCardClick);
       host.style.cursor = "";
     },
   };

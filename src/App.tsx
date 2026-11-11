@@ -64,7 +64,7 @@ const LEGEND: Record<string, Array<{ swatch: string; label: string }>> = {
     { swatch: "dot #DCF763", label: "Middle third" },
     { swatch: "dot #fb7185", label: "Top third" },
   ],
-  active: [{ swatch: "ring #fb7185", label: "For sale now" }],
+  active: [{ swatch: "ring #fb923c", label: "For sale now" }],
   "sales-heat": [{ swatch: "heat", label: "Dollar volume of sales, last 12 months: warmer is more" }],
   routes: [
     { swatch: "solid #DCF763", label: "Drive, no traffic" },

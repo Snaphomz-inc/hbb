@@ -312,7 +312,7 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
     paint: withTransitions(
       {
         "circle-radius": activeRadius,
-        "circle-color": "#fb7185",
+        "circle-color": "#fb923c",
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": ["case", hovered, 2.6, 1.4],
         "circle-pitch-alignment": "map",
@@ -327,7 +327,7 @@ function addDataLayers(map: maplibregl.Map, data: Neighborhood): void {
     paint: {
       "circle-radius": ["interpolate", ["linear"], ring, 0, 5, 1, 28],
       "circle-color": "rgba(0, 0, 0, 0)",
-      "circle-stroke-color": "#fb7185",
+      "circle-stroke-color": "#fb923c",
       "circle-stroke-width": ["interpolate", ["linear"], ring, 0, 2.5, 1, 1],
       "circle-stroke-opacity": ["interpolate", ["linear"], ring, 0, 0.95, 0.7, 0.35, 1, 0],
       "circle-pitch-alignment": "map",
