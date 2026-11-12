@@ -24,8 +24,9 @@ function pillWidth(name: string): number {
 /**
  * The neighborhoods next door, pinned to where they lie: over their centre while it is in view,
  * otherwise against the edge of the screen in their direction, the way a game marks what is off
- * screen. A click flies there. Pills that would land on the story's text, or on each other, stay
- * hidden.
+ * screen. A click flies there. They are for the start and the end of the story (the hero and the
+ * closing), not the chapters in between, and even then pills that would land on text, or on each
+ * other, stay hidden.
  *
  * Positions are written straight to the DOM inside the map's move event, like the fact labels, so
  * they keep up with a drag or a wheel zoom; React only renders when a pill's state changes.

@@ -971,7 +971,7 @@ export function App() {
             index={index}
             current={slug}
             onPick={hop}
-            hidden={explore !== "off"}
+            hidden={explore !== "off" || (chapter.kind !== "hero" && chapter.kind !== "closing")}
           />
 
           <div className={`hero ${chapter.kind === "hero" ? "show" : ""}`}>
